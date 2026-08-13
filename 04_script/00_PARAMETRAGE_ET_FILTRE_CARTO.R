@@ -121,13 +121,30 @@ if(Parametrage$TYPE_PERIMETRE[1] == "DT")
 ## 2.3. AJOUT DU BUFFER ----
 Filtre_buffer<-st_buffer(Filtre,ifelse(is.na(Parametrage$TAMPON),0,as.numeric(Parametrage$TAMPON)*1000))
 
-#3. SELECTION DES POINTS DE REJET ----
+#3. AJOUT DES POINTS DE REJET ----
+## 3.1. FICHIER DE BASE ----
+data_rejets_00<-read_excel("02_data/SITOUREF/PandaPression_OuvrageRejets_XY.xlsx")
+data_rejets_00<-data_rejets_00 |> 
+  rename("X" = `Coordonnée X L93`,
+         "Y" = `Coordonnée Y L93`)
+  
+data_rejets_00$X  <-gsub(",",".",data_rejets_00$X ) |> 
+  as.numeric()
+data_rejets_00$Y  <-gsub(",",".",data_rejets_00$Y )|> 
+  as.numeric()
 
+data_rejets_01<-st_as_sf(data_rejets_00, coords = c("X","Y"), crs = 2154)
 
+## 3.2. FILTRAGE SUR LE PERIMETRE ----
+data_rejets_filtre<-data_rejets_01 |> 
+  st_filter(Filtre_buffer)
 
+liste_points_rejet<-data_rejets_filtre |> 
+  select(`No interne Sitou`)
 
-
+## 3.3. CARTO TEST ----
 test_map<-ggplot(data=Filtre_buffer)+
    geom_sf() +
-   geom_sf(data=Filtre, colour="red", alpha=0.5)
+   geom_sf(data=Filtre, colour="red", alpha=0.5)+
+  geom_sf(data=data_rejets_filtre)
 print(test_map)
