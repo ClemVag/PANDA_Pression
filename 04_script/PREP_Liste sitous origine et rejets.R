@@ -51,39 +51,39 @@ autres_lignes <- createStyle(
 )
 
 
-  
-  # 1. FICHIERS DE DONNEES ----
-  # Le premier fichier de données est une extraction de Sitouref, qui contient sur un onglet l'ensemble des liaisons, 
-  # sur un autre onglet l'ensemble des Sitous avec leur caractéristique du type de site. 
-  # L'extraction provient de l'entrepôt de données. 
 
-  ## 1.1. LIENS ----
-  l_base <- read_excel("02_data/SITOUREF/OUTIL-016-2025_Maillage_sitous.xlsx", sheet = "Liaisons")
-  l_base <- l_base |> 
-    select(-`Liaison_Sitou-Amont`)
-  
-  ## 1.2. NOEUDS ----
-  n_base <- read_excel("02_data/SITOUREF/OUTIL-016-2025_Maillage_sitous.xlsx", sheet = "Sitous")
-  
-  n_DT<-n_base |> 
-    select(DT,No_Sitou) |> 
-    rename(identifiant = "No_Sitou")
-  
-  n_base<-n_base |>  
-    select(-`Libellé UG`,-DT) |>  
-    rename(identifiant = "No_Sitou")
+# 1. FICHIERS DE DONNEES ----
+# Le premier fichier de données est une extraction de Sitouref, qui contient sur un onglet l'ensemble des liaisons, 
+# sur un autre onglet l'ensemble des Sitous avec leur caractéristique du type de site. 
+# L'extraction provient de l'entrepôt de données. 
 
-  
-  ## 1.4. LISTE DES POINTS D'AUTOSURVEILLANCE STEU----
-  Pts_AS_STEU <- read_excel("02_data/SITOUREF/PandaPression_Liste_points_AS_STEP.xlsx")
+## 1.1. LIENS ----
+l_base <- read_excel("02_data/SITOUREF/OUTIL-016-2025_Maillage_sitous.xlsx", sheet = "Liaisons")
+l_base <- l_base |> 
+  select(-`Liaison_Sitou-Amont`)
+
+## 1.2. NOEUDS ----
+n_base <- read_excel("02_data/SITOUREF/OUTIL-016-2025_Maillage_sitous.xlsx", sheet = "Sitous")
+
+n_DT<-n_base |> 
+  select(DT,No_Sitou) |> 
+  rename(identifiant = "No_Sitou")
+
+n_base<-n_base |>  
+  select(-`Libellé UG`,-DT) |>  
+  rename(identifiant = "No_Sitou")
+
+
+## 1.4. LISTE DES POINTS D'AUTOSURVEILLANCE STEU----
+Pts_AS_STEU <- read_excel("02_data/SITOUREF/PandaPression_Liste_points_AS_STEP.xlsx")
 
 # 2. CREATION DES TABLES OBJETS ET LIAISONS ----
 
 
 # Pour constituer la liste des sites à étudier, on récupère tous les sitous
 # correspondant au type de sitou attendu. 
-  type_site = "026" # Point de rejet
-  liste_sites <- n_base |>  
+type_site = "026" # Point de rejet
+liste_sites <- n_base |>  
   filter(No_Type_Sitou == type_site)  |>  
   distinct() |> 
   select(identifiant, Nom_Sitou)
@@ -99,27 +99,27 @@ l_base <- l_base  |>
 #' Une liste est utilisée pour indiquer les sitous de "bout de chaîne" après 
 #' lesquels on va "couper" la recherche de généalogie.
 
-  break_list_amont<-c("029", # STEU
-                      "012", # Site indus
-                      "243", # SCL
-                      "013") # Exploitation agricole
-  
+break_list_amont<-c("029", # STEU
+                    "012", # Site indus
+                    "243", # SCL
+                    "013") # Exploitation agricole
+
 
 
 
 # 3. LOOP - CREATION DE LA LISTE DES SITES ----
 
- table_site_rejet <- n_site <- data.frame(
-    rejet = character(),
-    site_origine = character(),
-    rang = character()
-  )  
-   
+table_site_rejet <- n_site <- data.frame(
+  rejet = character(),
+  site_origine = character(),
+  rang = character()
+)  
+
 
 for (k in 1:nrow(liste_sites)) #nrow(liste_sites)
 {
   code_site <- liste_sites$identifiant[k]
-
+  
   
   n_site <- data.frame(
     identifiant = character(),
@@ -127,7 +127,7 @@ for (k in 1:nrow(liste_sites)) #nrow(liste_sites)
     No_Type_Sitou = character()
   )
   n_breaklist_amont<-n_site
-
+  
   n_site_add <- n_base |> 
     filter(identifiant == code_site) 
   n_site <- n_site_add
@@ -177,7 +177,7 @@ for (k in 1:nrow(liste_sites)) #nrow(liste_sites)
     
     n_site_add_rang <-n_site_add |> 
       mutate(rang = rang_variable)
-      
+    
     n_site_amont <- distinct(rbind(n_site_amont, n_site_add))
     n2 <- nrow(n_site_amont)
     
@@ -224,7 +224,7 @@ for (k in 1:nrow(liste_sites)) #nrow(liste_sites)
 table_site_rejet<-distinct(table_site_rejet)
 
 liste_sites_origine <- liste_sites |> 
-left_join(table_site_rejet, by = c("identifiant" = "rejet")) |> 
+  left_join(table_site_rejet, by = c("identifiant" = "rejet")) |> 
   left_join(n_base, by = c("site_origine" = "identifiant")) |> 
   left_join(n_DT,  by = "identifiant") |>  
   select(-No_Type_Sitou) |> 
@@ -232,7 +232,7 @@ left_join(table_site_rejet, by = c("identifiant" = "rejet")) |>
          "nom_site_origine" = Nom_Sitou.y,
          "rejet" = identifiant ) |> 
   select(DT,rang,site_origine,nom_site_origine, rejet, nom_rejet)
-  
+
 
 
 
@@ -316,24 +316,51 @@ liste_restant<-liste_sites_origine |>
 
 ## 4.5. CONCATENATION DES TABLES
 table_correspondance_00<-bind_rows(liste_PAS_STEU,
-                        liste_PAS_SCL,
-                        liste_PAS_I,
-                        liste_restant) |> 
+                                   liste_PAS_SCL,
+                                   liste_PAS_I,
+                                   liste_restant) |> 
   left_join(l_base,by= c("rejet" = "No_Sitou_Am"), relationship = "many-to-many") |> 
   left_join(n_base, by = c("No_Sitou" = "identifiant")) |> 
   select(-liaison, -No_Type_Sitou) |> 
   rename("milieu_recepteur" = No_Sitou,
          "nom_milieu_recepteur" = Nom_Sitou)
 
-#' On a la table de correspondance complète.
-#' On va faire quelques tests pour vérifier les informations.
-#' 
-#' 
-  
+#' Ajout de champs de vérification pour faciliter l'analyse.
+
+comptage_pt_AS_par_rejet <- table_correspondance_00 |>
+  select(rejet,pt_AS) |> 
+  distinct() |> 
+  group_by(rejet) |>
+  summarise(nb_pt_AS_par_rejet = n())
+
+comptage_pt_AS_par_site <- table_correspondance_00 |>
+  select(site_origine,pt_AS) |> 
+  distinct() |> 
+  group_by(site_origine) |>
+  summarise(nb_pt_AS_par_site = n())
+
+comptage_rejet_par_site <- table_correspondance_00 |>
+  select(site_origine,rejet) |> 
+  distinct() |> 
+  group_by(site_origine) |>
+  summarise(nb_rejet_par_site  = n())
+
+
+
+# Ensuite joindre au tableau principal
+table_correspondance <- table_correspondance_00 |>
+  left_join(comptage_pt_AS_par_rejet, by="rejet") |> 
+  left_join(comptage_pt_AS_par_site, by = "site_origine") |> 
+  left_join(comptage_rejet_par_site, by = "site_origine") |> 
+  mutate(a_verifier = ifelse(str_sub(site_origine,-3)=="029" &    # A vérifier si le site est une STEU
+                               nb_rejet_par_site > 1, "oui",NA))   # et qu'il y a plus d'un rejet (un rejet 
+# peut venir du A2, du A5, du A4...)
+
+
 # 5. EXPORT FICHIER VUE D'ENSEMBLE -----
 
 wb <- createWorkbook()
-# ecrire_onglet(wb,"liste_PM_SCL",liste_PM_SCL)
+ecrire_onglet(wb,"table_correspondance",table_correspondance)
 # ecrire_onglet(wb,"liste_PM_STEU",liste_PM_STEU)
 # ecrire_onglet(wb,)
 saveWorkbook(wb, "03_intermediary_data/Table_correspondance.xlsx", overwrite = TRUE)
