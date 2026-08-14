@@ -130,7 +130,9 @@ l_base <- l_base  |>
 
 
 # 3. LOOP SUR LA LISTE DES SITES ----
+ 
 ## 3.1. RECHERCHE DU SITOU A L'ORIGINE DES POLLUTIONS ----
+ 
 for (k in 1:nrow(liste_sites)) #
   #for (k in 1:50)
   #k=60
@@ -140,13 +142,7 @@ for (k in 1:nrow(liste_sites)) #
 
   # Informations relatives au site et à son futur chemin d'export
   code_site <- liste_sites$identifiant[k]
-  nom_site <- liste_sites$Nom_Sitou[k]
-  # UH <- ifelse(length(export_chemin$UH[which(export_chemin$`No interne Sitou` ==
-  #                                              code_site)]) == 0,
-  #              "Pas d'UH",
-  #              export_chemin$UH[which(export_chemin$`No interne Sitou` == code_site)])
-  # 
-  
+
   ### 3.1.2. TABLE DES NOEUDS ----
   n_site <- data.frame(
     identifiant = character(),
@@ -168,8 +164,7 @@ for (k in 1:nrow(liste_sites)) #
   n_site_rang <- n_site_add |> 
     mutate(rang = 0)
   
-  ### On cherche avec quels autres sitou notre liste de sitous a des liens
-  # D'abord les liens amont
+  ### On cherche les ascendants du Sitou en s'arrêtant sur la liste de site de la breaklist
   while (n2 != n1)
   {
     rang_variable = rang_variable + 1
@@ -271,6 +266,9 @@ liste_PM_STEU<-liste_sites_origine |>
 
 
 ### 3.2.3. POINTS D'AUTOSURVEILLANCE INDUSTRIELS ----
+
+#### V1 -----
+
 # Création de la table de base 
 liste_PM_indus_base<-l_base |> 
   filter(liaison %in% c("085-224",    # Atelier indus --> Point d'AS 
@@ -281,13 +279,22 @@ liste_PM_indus<-n_base |>
   filter(identifiant %in% liste_PM_indus_base$No_Sitou) |> 
   select(-No_Type_Sitou)
 
-#### Recherche des ascendants ----
-#' [TODO] REPRENDRE ICI
-#' 
-#' 
-for (k in 1:nrow(liste_PM_indus))
-{
+table_site_Pt_AS <- data.frame(
+  pt_AS = character(),
+  site_origine = character()
+)
 
+#### Recherche des ascendants ----
+#' 
+#' 
+#' 
+# for (k in 1:10)
+for (k in 1:400)
+{
+  code_point <- liste_PM_indus$identifiant[k]
+  
+
+  
   n_site <- data.frame(
   identifiant = character(),
   Nom_Sitou = character(),
@@ -297,24 +304,19 @@ n_breaklist_amont<-n_site
 
 
 n_site_add <- n_base |> 
-  filter(identifiant == code_site) 
+  filter(identifiant == code_point) 
 n_site <- n_site_add
 n_site_aval <- n_site
 n_site_amont<-n_site
 
 n1 <- 1
 n2 <- 0
-rang_variable = 0
 
-n_site_rang <- n_site_add |> 
-  mutate(rang = 0)
 
 ### On cherche avec quels autres sitou notre liste de sitous a des liens
 # D'abord les liens amont
 while (n2 != n1)
 {
-  rang_variable = rang_variable + 1
-  
   n1 <- nrow(n_site_amont)
   
   if(n1>1) #On n'exécute pas cette étape sur la première itération pour éviter d'écarter le sitou central.
@@ -343,29 +345,68 @@ while (n2 != n1)
   n_site_add <- n_base |> 
     filter(identifiant %in% lien_site$No_Sitou)
   
-  
-  n_site_add_rang <-n_site_add |> 
-    mutate(rang = rang_variable)
-  
+
   n_site_amont <- distinct(rbind(n_site_amont, n_site_add))
   n2 <- nrow(n_site_amont)
-  
-  n_site_rang <-rbind(n_site_rang, n_site_add_rang)
   
 }
 # On ajoute (en retirant les doublons) les noeuds dans la breaklist pour avoir
 # une liste finale de sitous amont.
 n_site_amont<-distinct(rbind(n_site_amont,n_breaklist_amont))
 
-n_site_rang<-n_site_rang |> 
-  filter(No_Type_Sitou %in% c(type_site,break_list_amont)) |>
-  arrange(desc(rang)) |> 
-  distinct(identifiant,No_Type_Sitou,Nom_Sitou,.keep_all=TRUE)
+
+table_stack <- n_site_amont |> 
+  filter(No_Type_Sitou != "224") |> 
+  select(identifiant) |> 
+  mutate(pt_AS = code_point) |> 
+  rename("site_origine" = identifiant) |> 
+  relocate(pt_AS, .before = everything())
+
+table_site_Pt_AS<-rbind(table_site_Pt_AS,table_stack)
+
 }
+table_site_Pt_AS<-distinct(table_site_Pt_AS)
+
+table_site_Pt_AS_01<- table_site_Pt_AS|> 
+  mutate(type_sitou = str_sub(site_origine,-3)) |> 
+  pivot_wider(names_from = type_sitou,
+              values_from = site_origine,
+              values_fill = NA)
+
+liste_Pt_AS_indus_origine <- liste_PM_indus |> 
+  left_join(table_site_Pt_AS, by = c("identifiant" = "pt_AS")) |> 
+  left_join(n_base, by = c("site_origine" = "identifiant")) |> 
+  left_join(n_DT,  by = c("site_origine" = "identifiant")) |>  
+  relocate(DT, .before = everything()) |> 
+  select(-No_Type_Sitou)
+
+
+#### V2 ----
+liste_PAS_I_00 <-l_base |> 
+  filter(liaison %in% c("085-224",    # Atelier indus --> Point d'AS 
+                        "025-224")) |>    # STEU indus  --> Point d'AS
+  select(-liaison) |> 
+  rename("pt_AS" = No_Sitou)
+
+
+liste_PAS_I_01 <-l_base |> 
+  filter(liaison %in% c("085-026",    # Atelier indus --> Point de rejet 
+                        "025-026"))|>    # STEU indus  --> Point de rejet
+  select(-liaison) |> 
+  rename("rejet" = No_Sitou)
+
+
+liste_PAS_I_02<-liste_PAS_I_00 |> 
+  left_join(liste_PAS_I_01, by = "No_Sitou_Am", relationship = "many-to-many") |> 
+  filter(!is.na(rejet)) |> 
+  select(-No_Sitou_Am) |> 
+  left_join(n_base,by=c("pt_AS"="identifiant"))
+
 
 # 4. EXPORT FICHIER VUE D'ENSEMBLE -----
 
 wb <- createWorkbook()
 ecrire_onglet(wb,"liste_PM_SCL",liste_PM_SCL)
 ecrire_onglet(wb,"liste_PM_STEU",liste_PM_STEU)
+ecrire_onglet(wb,)
 saveWorkbook(wb, "03_intermediary_data/Table_correspondance.xlsx", overwrite = TRUE)
