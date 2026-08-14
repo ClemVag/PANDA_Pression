@@ -60,7 +60,10 @@ autres_lignes <- createStyle(
 ## 1.1. LIENS ----
 l_base <- read_excel("02_data/SITOUREF/OUTIL-016-2025_Maillage_sitous.xlsx", sheet = "Liaisons")
 l_base <- l_base |> 
-  select(-`Liaison_Sitou-Amont`)
+  select(-`Liaison_Sitou-Amont`)|> 
+  mutate(liaison = paste0(str_sub(No_Sitou_Am, -3), "-", str_sub(No_Sitou, -3))) |>  
+  distinct()
+
 
 ## 1.2. NOEUDS ----
 n_base <- read_excel("02_data/SITOUREF/OUTIL-016-2025_Maillage_sitous.xlsx", sheet = "Sitous")
@@ -73,29 +76,26 @@ n_base<-n_base |>
   select(-`Libellé UG`,-DT) |>  
   rename(identifiant = "No_Sitou")
 
+## 1.3. LISTE DES POINTS D'AUTOSURVEILLANCE STEU----
+#' On utilise un fichier spécifique pour pouvoir récupérer les informations
+#' liées aux points d'autosurveillance
 
-## 1.4. LISTE DES POINTS D'AUTOSURVEILLANCE STEU----
 Pts_AS_STEU <- read_excel("02_data/SITOUREF/PandaPression_Liste_points_AS_STEP.xlsx")
+
 
 # 2. CREATION DES TABLES OBJETS ET LIAISONS ----
 
-
+## 2.1. CREATION DE LA LISTE DES REJETS A ETUDIER ----
 # Pour constituer la liste des sites à étudier, on récupère tous les sitous
-# correspondant au type de sitou attendu. 
-type_site = "026" # Point de rejet
+# correspondant au type de sitou "point de rejet" (026) 
+type_site = "026" 
 liste_sites <- n_base |>  
   filter(No_Type_Sitou == type_site)  |>  
   distinct() |> 
   select(identifiant, Nom_Sitou)
 
 
-### 2.1. CREATION DE LA TABLE DES LIENS ----
-l_base <- l_base  |> 
-  mutate(liaison = paste0(str_sub(No_Sitou_Am, -3), "-", str_sub(No_Sitou, -3))) |>  
-  distinct()
-
-
-## 2.3. LISTE DES OBJETS "DEBUT","FIN" DE MAILLAGE (BREAK) ----
+## 2.2. LISTE DES OBJETS "FIN" DE MAILLAGE (BREAK) ----
 #' Une liste est utilisée pour indiquer les sitous de "bout de chaîne" après 
 #' lesquels on va "couper" la recherche de généalogie.
 
@@ -109,13 +109,29 @@ break_list_amont<-c("029", # STEU
 
 # 3. LOOP - CREATION DE LA LISTE DES SITES ----
 
+#' Dans cette partie du script, on va identifier le sitou à l'origine des pollutions
+#' (STEU, site industriel, SCL ou exploitation agricole) en partant du point de rejet
+#' et en remontant sa généalogie jusqu'à arriver sur l'un de ces sites.
+#' 
+#' Le rang du site origine, défini dans cette partie du code, permet de connaître
+#' le niveau d'éloignement du sitou à l'origine des pollutions (en termes de maillage)
+#' au point de rejet.
+#' 
+#' Il sera utilisé pour s'assurer de conserver le bon sitou en cas de possibilités
+#' multiples. 
+
+#' Initialisation de la table dans laquelle seront stockés les résultats
 table_site_rejet <- n_site <- data.frame(
   rejet = character(),
   site_origine = character(),
   rang = character()
 )  
 
-
+#' On fait une boucle sur l'ensemble de la liste des points de rejet. 
+#' Pour cela, on va remonter, rejet par rejet, sa généalogie.
+#' C'est le sens de la boucle "while", qui permet de faire un nombre d'itérations
+#' variable selon le nombre de sitous. 
+#' 
 for (k in 1:nrow(liste_sites)) #nrow(liste_sites)
 {
   code_site <- liste_sites$identifiant[k]
@@ -184,9 +200,12 @@ for (k in 1:nrow(liste_sites)) #nrow(liste_sites)
     n_site_rang <-rbind(n_site_rang, n_site_add_rang)
     
   }
+  
+  
   #' On ajoute (en retirant les doublons) les noeuds dans la breaklist pour avoir
   #' une liste finale de sitous amont.
   n_site_amont<-distinct(rbind(n_site_amont,n_breaklist_amont))
+  
   
   #' On reprend la liste des sites avec leurs rangs, en supprimant les éventuels doublons
   #' (surtout valable pour les sites industriels)
@@ -194,6 +213,7 @@ for (k in 1:nrow(liste_sites)) #nrow(liste_sites)
     filter(No_Type_Sitou %in% c(type_site,break_list_amont)) |>
     arrange(desc(rang)) |> 
     distinct(identifiant,No_Type_Sitou,Nom_Sitou,.keep_all=TRUE)
+  
   
   #' Pour éviter de retrouver TOUS les sites étant ascendants d'un point de rejet 
   #' (par ex, site industriel connecté à un SSCL connecté à un point de rejet),
@@ -210,6 +230,7 @@ for (k in 1:nrow(liste_sites)) #nrow(liste_sites)
       filter(n_site_rang$rang != rang_max)
   }
   
+  
   #' Et enfin, on compile avec la table globale
   table_stack <- n_site_rang |> 
     filter(No_Type_Sitou != "026") |> 
@@ -221,8 +242,12 @@ for (k in 1:nrow(liste_sites)) #nrow(liste_sites)
   table_site_rejet<-rbind(table_site_rejet,table_stack)
   
 }
+# On obtient une table globale liant les sites et les rejets.
+# On commence par retirer les doublons :
 table_site_rejet<-distinct(table_site_rejet)
 
+#' Puis on va la rendre plus lisible en ajoutant les noms des différents ouvrages,
+#' en renommant les colonnes, et en la réorganisant. 
 liste_sites_origine <- liste_sites |> 
   left_join(table_site_rejet, by = c("identifiant" = "rejet")) |> 
   left_join(n_base, by = c("site_origine" = "identifiant")) |> 
@@ -233,12 +258,17 @@ liste_sites_origine <- liste_sites |>
          "rejet" = identifiant ) |> 
   select(DT,rang,site_origine,nom_site_origine, rejet, nom_rejet)
 
-
+#' On va ensuite découper cette table par famille de sitou origine pour rechercher
+#' les points d'autosurveillance associés (ceux qui portent les mesures de flux de 
+#' pollution, avec lesquels on pourra faire ultérieurement une jointure).
 
 
 # 4. RECHERCHE DU SITOU POINT DE MESURE D'AUTOSURVEILLANCE ASSOCIE ----
 
 ## 4.1. POINTS D'AUTOSURVEILLANCE SCL ----
+# Le cas le plus simple : un maillage linéaire SCL --> SSCL --> Pt AS SCL --> Rejet 
+# Un rejet peut avoir plus d'un point d'autosurveillance associé, d'où la relation
+# "many-to-many" dans les jointures. 
 
 liste_PAS_SCL_00<-table_site_rejet |> 
   filter(str_sub(site_origine,-3)=="243") |> 
@@ -257,11 +287,23 @@ liste_PAS_SCL <-liste_sites_origine |>
 
 
 ## 4.2. POINTS D'AUTOSURVEILLANCE STEU ----
+#' Pour les points d'autosurveillance STEU, les points d'autosurveillance ET les 
+#' points de rejets sont connectés à la STEU mais de manière non linéaire :
+#' 
+#'        Rejet
+#'      /
+#' STEU
+#'      \
+#'        Point AS
+#'        
+#' On va dont dans un premier temps appairer tous les rejets à tous les points 
+#' d'autosurveillance.
+#' Les rejets à vérifier seront "tagués" sur le fichier final. 
+
 liste_PAS_STEU_00<-Pts_AS_STEU |> 
   select(`No interne Sitou amont`,`No interne Sitou`,LocalisationSitouref) |> 
   filter(LocalisationSitouref %in% c("A2","A5","A4")) |> 
   group_by(`No interne Sitou amont`) |> 
-  #mutate(nb_pts = n()) |> 
   ungroup() |> 
   rename("site_origine" = `No interne Sitou amont`,
          "pt_AS" = `No interne Sitou`,
@@ -274,6 +316,26 @@ liste_PAS_STEU<-liste_sites_origine |>
 
 
 ## 4.3. POINTS D'AUTOSURVEILLANCE INDUSTRIELS ----
+#' Pour les points d'autosurveillance indsutriels, c'est un peu similaire au cas
+#' des STEU, sauf qu'on peut avoir deux types de points en amont : 
+#' - des STEU indutrielles (025)
+#' - des ateliers industriels (085) 
+#' La connexion est similaire à celle des STEU : 
+#' 
+#'                                    Rejet
+#'                                  /
+#' STEU indus ou atelier industriel
+#'                                  \
+#'                                    Point AS
+#'        
+#' Chaque STEU indus ou atelier indus ne portant qu'un seul point d'AS et qu'un 
+#' seul rejet.
+#' On va dont dans un premier temps rechercher tous les points d'autosurveillance
+#' concernés sur la base des liaisons entre point d'autosurveillance et atelier 
+#' indus / STEU indus, puis la même chose avec les rejets, et ensuite faire
+#' une jointure. 
+#' 
+
 liste_PAS_I_00 <-l_base |> 
   filter(liaison %in% c("085-224",        # Atelier indus --> Point d'AS 
                         "025-224")) |>    # STEU indus  --> Point d'AS
@@ -302,6 +364,7 @@ liste_PAS_I<-liste_sites_origine |>
 
 
 ## 4.4. POINTS DE REJETS RESTANTS -----
+#' On regarde ensuite tous les sitous "orphelins", ceux qui n'apparaissent pas dans les autres catégories.
 liste_restant<-liste_sites_origine |> 
   filter(rejet %nin% c(liste_PAS_STEU$rejet, 
                        liste_PAS_SCL$rejet,
@@ -315,6 +378,10 @@ liste_restant<-liste_sites_origine |>
 # max(liste_restant$nb_liaisons)
 
 ## 4.5. CONCATENATION DES TABLES
+
+#' On rassemble toutes les tables dans une table unique de corespondance, à laquelle
+#' on ajoute la connexion avec le milieu récepteur.
+
 table_correspondance_00<-bind_rows(liste_PAS_STEU,
                                    liste_PAS_SCL,
                                    liste_PAS_I,
@@ -354,7 +421,7 @@ table_correspondance <- table_correspondance_00 |>
   left_join(comptage_rejet_par_site, by = "site_origine") |> 
   mutate(a_verifier = ifelse(str_sub(site_origine,-3)=="029" &    # A vérifier si le site est une STEU
                                nb_rejet_par_site > 1, "oui",NA))   # et qu'il y a plus d'un rejet (un rejet 
-# peut venir du A2, du A5, du A4...)
+                                                                  # peut venir du A2, du A5, du A4...)
 
 
 # 5. EXPORT FICHIER VUE D'ENSEMBLE -----
