@@ -123,28 +123,31 @@ Filtre_buffer<-st_buffer(Filtre,ifelse(is.na(Parametrage$TAMPON),0,as.numeric(Pa
 
 #3. AJOUT DES POINTS DE REJET ----
 ## 3.1. FICHIER DE BASE ----
-data_rejets_00<-read_excel("02_data/SITOUREF/PandaPression_OuvrageRejets_XY.xlsx")
-data_rejets_00<-data_rejets_00 |> 
+data_geo_00<-read_excel("02_data/SITOUREF/PandaPression_Ouvrages_XY.xlsx")
+data_geo_00<-data_geo_00 |>
   rename("X" = `Coordonnée X L93`,
-         "Y" = `Coordonnée Y L93`)
-  
-data_rejets_00$X  <-gsub(",",".",data_rejets_00$X ) |> 
+         "Y" = `Coordonnée Y L93`,
+         )
+data_geo_00$X  <-gsub(",",".",data_geo_00$X ) |> 
   as.numeric()
-data_rejets_00$Y  <-gsub(",",".",data_rejets_00$Y )|> 
+data_geo_00$Y  <-gsub(",",".",data_geo_00$Y )|> 
   as.numeric()
 
-data_rejets_01<-st_as_sf(data_rejets_00, coords = c("X","Y"), crs = 2154)
+data_geo_01<-st_as_sf(data_geo_00, coords = c("X","Y"), crs = 2154)
+
+
 
 ## 3.2. FILTRAGE SUR LE PERIMETRE ----
-data_rejets_filtre<-data_rejets_01 |> 
+XY_rejets_filtre<-data_geo_01 |> 
+  filter(str_sub(`No interne Sitou`,-3) == "026") |> #On conserve uniquement
   st_filter(Filtre_buffer)
 
-liste_points_rejet<-data_rejets_filtre |> 
+liste_points_rejet<-XY_rejets_filtre |> 
   select(`No interne Sitou`)
 
 ## 3.3. CARTO TEST ----
 test_map<-ggplot(data=Filtre_buffer)+
    geom_sf() +
    geom_sf(data=Filtre, colour="red", alpha=0.5)+
-  geom_sf(data=data_rejets_filtre)
+  geom_sf(data=XY_rejets_filtre)
 print(test_map)

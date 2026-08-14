@@ -102,6 +102,7 @@ liste_sites <- n_base |>
 break_list_amont<-c("029", # STEU
                     "012", # Site indus
                     "243", # SCL
+                    # "096", # Site non économique --> A ajouter à terme.
                     "013") # Exploitation agricole
 
 
@@ -419,9 +420,11 @@ table_correspondance <- table_correspondance_00 |>
   left_join(comptage_pt_AS_par_rejet, by="rejet") |> 
   left_join(comptage_pt_AS_par_site, by = "site_origine") |> 
   left_join(comptage_rejet_par_site, by = "site_origine") |> 
-  mutate(a_verifier = ifelse(str_sub(site_origine,-3)=="029" &    # A vérifier si le site est une STEU
-                               nb_rejet_par_site > 1, "oui",NA))   # et qu'il y a plus d'un rejet (un rejet 
-                                                                  # peut venir du A2, du A5, du A4...)
+  #' On ajoute un champ "à vérifier" si le site est une STEU et qu'il y a plus 
+  #' d'un rejet (un rejet peut venir du A2, du A5, du A4...)
+  mutate(a_verifier = ifelse(str_sub(site_origine,-3)=="029" &  
+                               nb_rejet_par_site > 1, "oui",NA))
+
 
 
 # 5. EXPORT FICHIER VUE D'ENSEMBLE -----

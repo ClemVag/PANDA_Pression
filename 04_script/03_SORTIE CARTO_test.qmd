@@ -1,0 +1,174 @@
+---
+title: "03_SORTIE CARTO TEST"
+format: html
+---
+
+## Observable JS
+
+This Quarto document is made interactive using Observable JS. Interactive documents allow readers to modify parameters and see the results immediately. Learn more about OJS interactive documents at <https://quarto.org/docs/interactive/ojs/>.
+
+## Bubble Chart
+
+This example uses a D3 bubble chart imported from Observable HQ to analyze commits to GitHub repositories.
+
+Select a repository to analyze the commits of:
+
+```{ojs}
+//| echo: false
+//| panel: input
+viewof repo = Inputs.radio(
+  [
+    "pandas-dev/pandas",
+    "tidyverse/ggplot2",
+  ], 
+  { label: "Repository:", value: "pandas-dev/pandas"}
+)
+```
+
+Fetch the commits for the specified `repo` using the GitHub API:
+
+```{ojs}
+d3 = require('d3')
+contributors = await d3.json(
+  "https://api.github.com/repos/" + repo + "/stats/contributors"
+)
+commits = contributors.map(contributor => {
+  const author = contributor.author;
+  return {
+    name: author.login,
+    title: author.login,
+    group: author.type,
+    value: contributor.total
+  }
+})
+```
+
+Note that the `repo` variable is bound dynamically from the radio input defined above. If you change the input the contributors query will be automatically re-executed.
+
+View the commits sorted by most to least:
+
+```{ojs}
+Inputs.table(commits, { sort: "value", reverse: true })
+```
+
+Visualize using a D3 bubble chart imported from Observable HQ:
+
+```{ojs}
+import { chart } with { commits as data } 
+  from "@d3/d3-bubble-chart"
+chart
+```
+
+
+```{r}
+{
+  library(conflicted)
+  library(cowplot)
+  library(dplyr)
+  library(flextable)
+  library(forcats)
+  library(geodata)
+  library(ggnewscale) # Package permettant à plusieurs échelles de couleurs de coexister
+  library(ggplot2)
+  library(ggrepel)
+  library(ggspatial)
+  library(here)    # rapports
+  library(janitor) # doublons
+  library(leaflet)
+  library(lubridate) # date et heure
+  library(mapsf)
+  library(mapview)
+  library(openxlsx)
+  library(osmdata)
+  library(plotly)
+  library(quarto) # rapports
+  library(questionr)
+  library(raster)
+  library(readr)
+  library(readxl)
+  library(remotes)
+  library(rmarkdown) # rapports
+  library(scales)
+  library(sf)
+  library(spData)
+  library(stars)
+  library(stringr)
+  library(summarytools)
+  library(tidyr)
+  library(tidyr) # pivot de table
+  library(tidyverse)
+  library(tmap)
+  ## lors d'un export dans excel permet de garder format date YYYY-MM-DD (sinon peut devenir YYYY-DD-MM)
+  options(openxlsx.dateFormat = "yyyy-mm-dd")
+  conflict_prefer_all("dplyr")
+  conflicts_prefer(lubridate::month)
+}
+
+# FONCTIONS
+`%nin%` <- negate(`%in%`)
+# Attention, pour le dev, lancer le script 01 avant toute modification !
+Liste_points_AS_SCL<-read_excel("02_data/SITOUREF/Liste_points_AS_SCL.xlsx")
+
+Liste_points_AS_SCL<-Liste_points_AS_SCL |> 
+  rename("pt_AS" = `No interne Sitou`,
+         "nom_pt_AS" = `Nom Sitou`
+  )
+Liste_points_AS_SCL$Classe <- factor(Liste_points_AS_SCL$Classe,
+                                     levels = c("< 120 kgDBO/j", "de 120 à 600 kgDBO/j", "> 600 kgDBO/j")
+)
+
+Liste_points_AS_SCL$Classe<-Liste_points_AS_SCL$Classe %>% 
+  fct_recode(
+    "<120" = "< 120 kgDBO/j",
+    "120-600" = "de 120 à 600 kgDBO/j",
+    ">600" = "> 600 kgDBO/j"
+  )
+
+
+
+table_correspondance_00 <- read_excel("03_intermediary_data/Table_correspondance.xlsx")
+
+table_correspondance_01 <-table_correspondance_00 |> 
+  filter(rejet %in% liste_points_rejet$`No interne Sitou`) |> 
+  mutate(type_rejet = case_when(str_sub(site_origine, -3)== "029" ~ "STEU",                                                                                    str_sub(site_origine, -3)== "029" ~ "SCL",
+                                str_sub(site_origine, -3)== "243" ~ "SCL",
+                                str_sub(site_origine, -3)== "012" ~ "INDUSTRIE",
+                                TRUE ~ "AUTRE"))
+
+
+
+
+
+# Ajout d'information au niveau du type de point de rejet
+
+
+XY_rejets_filtre<-data_geo_01 |> 
+  filter(`No interne Sitou`%in% table_correspondance_01$rejet)|> 
+  rename("rejet" = `No interne Sitou`,
+         "nom_rejet" = `Nom Sitou`) |> 
+  st_filter(Filtre_buffer) |> 
+  left_join(table_correspondance_01, by = c("rejet","nom_rejet" )) 
+# Ajouter ici la jointure sur les tables d'information des flux.
+
+
+XY_rejets_SCL<-XY_rejets_filtre |> 
+  filter(type_rejet == "SCL") |> 
+  left_join(Liste_points_AS_SCL, by=c("pt_AS","nom_pt_AS")) |> 
+  select(rejet,pt_AS, nom_pt_AS, Classe, `Type réseau`)
+
+
+XY_site_origine<-data_geo_01 |> 
+  filter(`No interne Sitou`%in% table_correspondance_01$site_origine &
+           `No interne Sitou`!="243" )|> #Pas de coordonnées géographiques associés aux SCL
+  st_filter(Filtre_buffer)
+
+# CONFIGURATION DE LA CARTOGRAPHIE DE SORTIE
+
+carte_interactive <- leaflet() |> 
+  #addTiles() %>%
+  addProviderTiles(providers$OpenStreetMap.France) |> 
+  addMarkers(lng = 2.790025858133278 , lat = 49.398777487570484, popup = "Vous êtes ici !")
+
+
+carte_interactive
+```

@@ -47,7 +47,7 @@ script <- "PRESSION"
 # 3. PREPARATION FICHIER ENTREPOT DE DONNEES ----
 # ─────────────────────────────────────────────
     ## 3.1. DONNEES DE ROSEAU----
-    Roseau_SCL <- read_delim("02_data/Roseau.csv", 
+    Roseau_SCL <- read_delim("data/Roseau.csv", 
                              delim = ";", escape_double = FALSE,
                              locale = locale(decimal_mark = ",", grouping_mark = "."), 
                              trim_ws = TRUE)
@@ -64,12 +64,12 @@ script <- "PRESSION"
     
     
     ## 3.2. TABLE CORRESPONDANCE ROSEAU SITOUREF ----
-    Table_corresp_Roseau_Sitouref <- read_excel("02_data/Table_corresp_Roseau_Sitouref.xlsx") %>% 
+    Table_corresp_Roseau_Sitouref <- read_excel("data/Table_corresp_Roseau_Sitouref.xlsx") %>% 
       rename("Code_SANDRE"=`Code Sandre SCL Sitouref`)
     
     ## 3.3. DONNEES DE SITOUREF----
     ### Liste des points d'autosurveillance ----
-    Liste_points_AS_SCL<-read_excel("02_data/SITOUREF/Liste_points_AS_SCL.xlsx", 
+    Liste_points_AS_SCL<-read_excel("data/Liste_points_AS_SCL.xlsx", 
                                     sheet = "SCL")
     Liste_points_AS_SCL<-Liste_points_AS_SCL %>% 
       select(DT,Code_SANDRE_SCL,Nom_SCL,`No interne Sitou`,`Nom Sitou`,`Identifiant principal Sitou`,LocalisationSitouref,Classe, `Type réseau`) %>% 
@@ -101,17 +101,17 @@ script <- "PRESSION"
       # Choisir la requête sur l'entrepot de données utilisée pour PANDA
     
         if (DT %in% c("DVO", "DVM", "DBN", "DSAM", "DSAV")) {
-          data_all_STEP_0 <- read_excel(paste0("02_data/DEQUADO/Données_AS_STEP_", DT, ".xlsx"), sheet = "STEP")
-          data_all_SCL_0  <- read_excel(paste0("02_data/DEQUADO/Données_AS_SCL_", DT, ".xlsx"), sheet = "Réseaux")
+          data_all_STEP_0 <- read_excel(paste0("data/Données_AS_STEP_", DT, ".xlsx"), sheet = "STEP")
+          data_all_SCL_0  <- read_excel(paste0("data/Données_AS_SCL_", DT, ".xlsx"), sheet = "Réseaux")
           
         } else if (DT == "DSF") {
-          data_all_STEP_01 <- read_excel("02_data/DEQUADO/Données_AS_STEP_DSF_DRIF.xlsx", sheet = "STEP")
-          data_all_STEP_02 <- read_excel("02_data/DEQUADO/Données_AS_STEP_DSF_DPPC.xlsx", sheet = "STEP")
+          data_all_STEP_01 <- read_excel("data/Données_AS_STEP_DSF_DRIF.xlsx", sheet = "STEP")
+          data_all_STEP_02 <- read_excel("data/Données_AS_STEP_DSF_DPPC.xlsx", sheet = "STEP")
           colnames(data_all_STEP_02) <- colnames(data_all_STEP_01)
           data_all_STEP_0 <- rbind(data_all_STEP_01, data_all_STEP_02)
           
-          data_all_SCL_01 <- read_excel("02_data/DEQUADO/Données_AS_SCL_DSF_DRIF.xlsx", sheet = "Réseaux")
-          data_all_SCL_02 <- read_excel("02_data/DEQUADO/Données_AS_SCL_DSF_DPPC.xlsx", sheet = "Réseaux")
+          data_all_SCL_01 <- read_excel("data/Données_AS_SCL_DSF_DRIF.xlsx", sheet = "Réseaux")
+          data_all_SCL_02 <- read_excel("data/Données_AS_SCL_DSF_DPPC.xlsx", sheet = "Réseaux")
           colnames(data_all_SCL_02) <- colnames(data_all_SCL_01)
           data_all_SCL_0 <- rbind(data_all_SCL_01, data_all_SCL_02)
         }
@@ -244,18 +244,23 @@ script <- "PRESSION"
               Code_unite = get(paste0("data_all_",type))$Code_unite
           ))) 
         
-
+}
     
     ### 3.4.7. CREATION DE LA LISTE DES STEP----
-        assign(
-          paste0("Liste__", type), 
-            data.frame(
-              get(paste0("data_all_",type))$Code_SANDRE
-            )) 
-        
-}
-        
-
+    Liste_STEP_nom <- distinct(
+      data.frame(
+        data_all_STEP$Station_Nom_Sitou,
+        data_all_STEP$Code_SANDRE,
+        data_all_STEP$Step_Capacite_nominale
+      )
+    )  #Voir si on conserve
+    colnames(Liste_STEP_nom) = c("Nom", "Code_SANDRE", "Capa")
+    
+    Liste_SCL_nom <- distinct(data.frame(data_all_SCL$SCL_Nom_Sitou,data_all_SCL$Code_SANDRE))  
+    
+    #Voir si on conserve
+    colnames(Liste_SCL_nom)<-c("Nom_SCL","Code_SANDRE")
+    
     ### 3.4.8. MISE EN FORME SORTIE EXCEL ----
     # En-tête
     entete <- createStyle(
@@ -299,10 +304,19 @@ if(script == "PRESSION")
   # ─────────────────────────────────────────────
   # 4.1. PARAMETRES DE FLUX ----
   # ─────────────────────────────────────────────
-
-  params_flux <- read_excel("02_data/BASE/Table_Param_Unites.xlsx") %>% 
-    rename("Code_sandre_parametre"=`Code sandre paramètre`) %>%
-    filter(Code_sandre_parametre %in% c("1313","1314","1305","1319","1335","1339","1340","1551","1350"))
+  
+  params_flux <- tribble(
+    ~Code_sandre_parametre, ~Lib_court_parametre,  ~Lib_long,
+    "1313",                 "DBO5",                "DBO5 (kg/j)",
+    "1314",                 "DCO",                 "DCO (kg/j)",
+    "1305",                 "MES",                 "MES (kg/j)",
+    "1319",                 "NTK",                 "NTK (kg/j)",
+    "1335",                 "NH4",                 "NH4 (kg/j)",
+    "1339",                 "NO2",                 "NO2 (kg/j)",
+    "1340",                 "NO3",                 "NO3 (kg/j)",
+    "1551",                 "NGL",                 "NGL (kg/j)",
+    "1350",                 "PT",                  "PT (kg/j)"
+  )
   
   code_debit <- "1552"  # Vol.Moy.J. en m3/j
   pts_rejet  <- c("A1", "R1","A2", "A4", "A5")
@@ -310,60 +324,75 @@ if(script == "PRESSION")
   # ─────────────────────────────────────────────
   # 4.2. PREPARATION DES DONNEES ----
   # ─────────────────────────────────────────────
-  for (type in ouvrages) {
-    assign(paste0("data_rejet_",type),
-           get(paste0("data_all_",type)) %>%
-             filter(Pt_SANDRE %in% pts_rejet)
-             )
   
+  data_rejet_STEP <- data_all_STEP %>%
+    filter(Pt_SANDRE %in% pts_rejet) %>%
+    rename(Commentaire_analyse=`Commentaire analyse`)
+  
+  data_rejet_SCL <- data_all_SCL %>%
+    filter(Pt_SANDRE %in% pts_rejet)
   
   # Débits journaliers (tous les jours disponibles, pas seulement les jours de bilan)
+  data_debit_STEP <- data_rejet_STEP %>%
+    filter(Code_sandre_parametre == code_debit) %>%
+    select(
+      DT, Code_SANDRE, Station_Nom_Sitou, Step_Capacite_nominale,											  
+      Pt_SANDRE, Date_debut_prel,
+      Val_resultat_analyse, Code_remarque, Derniere_qualif_analyse, Commentaire_analyse
+    ) %>%
+    rename(Debit_m3j = Val_resultat_analyse) %>%
+    mutate(
+      Annee       = year(Date_debut_prel),
+      Mois        = month(Date_debut_prel),
+      Nb_jours_mois = days_in_month(Date_debut_prel)
+    )
   
-  assign(paste0("data_debit_",type),
-         get(paste0("data_rejet_",type)) %>%
-           filter(Code_sandre_parametre == code_debit) %>%
-           select(
-             DT, 
-             Code_SANDRE, 										  
-             Pt_SANDRE, 
-             Date_debut_prel,
-             Val_resultat_analyse, 
-             Code_remarque, 
-             Derniere_qualif_analyse, 
-             Commentaire_analyse
-           ) %>%
-           rename(Debit_m3j = Val_resultat_analyse) %>%
-           mutate(
-             Annee       = year(Date_debut_prel),
-             Mois        = month(Date_debut_prel),
-             Nb_jours_mois = days_in_month(Date_debut_prel)
-           )
-  )
-  
-  
+  data_debit_SCL <- data_rejet_SCL %>%
+    filter(Code_sandre_parametre == code_debit) %>%
+    select(
+      DT, Code_SANDRE, SCL_Nom_Sitou, Classe_CBPO,
+      Pt_SANDRE, PP_Identifiant_principal_Sitou, PP_Nom_Sitou,
+      Date_debut_prel,Val_resultat_analyse, Code_remarque, 
+      Derniere_qualif_analyse, Commentaire_analyse
+    ) %>%
+    rename(
+      Debit_m3j = Val_resultat_analyse,
+      Identifiant_pt_AS = PP_Identifiant_principal_Sitou,
+      Nom_pt_AS = PP_Nom_Sitou
+    ) %>%
+    mutate(
+      Annee       = year(Date_debut_prel),
+      Mois        = month(Date_debut_prel),
+      Nb_jours_mois = days_in_month(Date_debut_prel)
+    )
   # Concentrations — uniquement les jours où concentration ET débit sont présents
   # (= jours de bilan 24h / jours de déversements)
+  data_conc_STEP <- data_rejet_STEP %>%
+    filter(Code_sandre_parametre %in% params_flux$Code_sandre_parametre) %>%
+    select(
+      DT, Code_SANDRE, Station_Nom_Sitou, Step_Capacite_nominale,
+      Pt_SANDRE, Date_debut_prel,
+      Code_sandre_parametre, Lib_court_parametre, Symbole_unite,
+      Val_resultat_analyse, Code_remarque, Derniere_qualif_analyse,
+	    Commentaire_analyse
+    ) %>%
+    rename(Concentration = Val_resultat_analyse)
   
-  assign(paste0("data_conc_",type),
-         get(paste0("data_rejet_",type)) %>%
-           filter(Code_sandre_parametre %in% params_flux$Code_sandre_parametre) %>%
-           select(
-             DT, 
-             Code_SANDRE,
-             Pt_SANDRE,
-             Date_debut_prel,
-             Code_sandre_parametre, 
-             Val_resultat_analyse, 
-             Code_remarque, 
-             Derniere_qualif_analyse,
-             Commentaire_analyse
-           ) %>%
-           rename(
-             Concentration = Val_resultat_analyse,
-           )
-  )
-
-  
+  data_conc_SCL <- data_rejet_SCL %>%
+    filter(Code_sandre_parametre %in% params_flux$Code_sandre_parametre) %>%
+    select(
+      DT, Code_SANDRE, SCL_Nom_Sitou, Classe_CBPO,
+      Pt_SANDRE, PP_Identifiant_principal_Sitou, PP_Nom_Sitou,
+      Date_debut_prel,
+      Code_sandre_parametre, Lib_court_parametre, Symbole_unite,
+      Val_resultat_analyse, Code_remarque, Derniere_qualif_analyse,
+      Commentaire_analyse
+    ) %>%
+    rename(
+      Concentration = Val_resultat_analyse,
+      Identifiant_pt_AS = PP_Identifiant_principal_Sitou,
+      Nom_pt_AS = PP_Nom_Sitou
+    )
   # ─────────────────────────────────────────────
   # 4.3. CALCUL DES FLUX JOURNALIERS — METHODE DECAPOL ----
   #
@@ -379,43 +408,29 @@ if(script == "PRESSION")
   # ─────────────────────────────────────────────
   
   # Grille complète : tous les jours avec débit × tous les paramètres
+  grille_jours_STEP <- data_debit_STEP %>%
+    filter(!is.na(Debit_m3j)) %>%
+    select(DT, Code_SANDRE, Station_Nom_Sitou, Step_Capacite_nominale,
+           Pt_SANDRE, Date_debut_prel, Debit_m3j,
+           Derniere_qualif_analyse,
+           Commentaire_analyse) %>%
+    crossing(params_flux %>% select(Code_sandre_parametre, Lib_court_parametre))
   
-  assign(paste0("grille_jours_",type),
-         get(paste0("data_debit_",type)) %>%
-           filter(!is.na(Debit_m3j)) %>% ## erreur filter à corriger
-           select(DT, Code_SANDRE, 
-                  Pt_SANDRE, Date_debut_prel, Debit_m3j,
-                  Derniere_qualif_analyse,
-                  Commentaire_analyse) %>%
-           crossing(params_flux %>% select(Code_sandre_parametre))
-  )
-
+  grille_jours_SCL <- data_debit_SCL %>%
+    filter(!is.na(Debit_m3j)) %>%
+    select(DT, Code_SANDRE, SCL_Nom_Sitou, Classe_CBPO,
+           Pt_SANDRE, Identifiant_pt_AS,Nom_pt_AS,
+           Date_debut_prel, Debit_m3j, Derniere_qualif_analyse,
+           Commentaire_analyse) %>%
+    crossing(params_flux %>% select(Code_sandre_parametre, Lib_court_parametre))
+  
   # Flux sur les jours de bilan = concentrations x volume
-  
-  assign(paste0("flux_",type),
-         get(paste0("grille_jours_",type)) %>%
-           inner_join(
-             paste0("data_conc_",type) %>% ## à corriger
-               filter(!is.na(Concentration)) %>%
-               select(Code_SANDRE, Pt_SANDRE, Code_sandre_parametre,
-                      Date_debut_prel, Concentration),
-             by = c("Code_SANDRE", "Pt_SANDRE", "Code_sandre_parametre", "Date_debut_prel")
-           ) %>%
-           mutate(
-             Annee     = year(Date_debut_prel),
-             Mois      = month(Date_debut_prel),
-             Flux_kg_j = Concentration * Debit_m3j * 1e-3,
-             Source_concentration = "Flux jour Bilan 24h"
-           )
-  )
-}
-
   flux_STEP <- grille_jours_STEP %>%
     inner_join(
       data_conc_STEP %>%
         filter(!is.na(Concentration)) %>%
         select(Code_SANDRE, Pt_SANDRE, Code_sandre_parametre,
-               Date_debut_prel, Concentration),
+               Date_debut_prel, Concentration, Symbole_unite),
       by = c("Code_SANDRE", "Pt_SANDRE", "Code_sandre_parametre", "Date_debut_prel")
     ) %>%
     mutate(
@@ -431,7 +446,7 @@ if(script == "PRESSION")
         filter(!is.na(Concentration)) %>%
         select(Code_SANDRE, Pt_SANDRE,
                Code_sandre_parametre,
-               Date_debut_prel, Concentration),
+               Date_debut_prel, Concentration, Symbole_unite),
       by = c("Code_SANDRE", "Pt_SANDRE", "Code_sandre_parametre", "Date_debut_prel")
     ) %>%
     mutate(
@@ -602,7 +617,7 @@ flux_an_SCL <- flux_an_SCL %>%
 # ─────────────────────────────────────────────
 # 4.4.bis STATIONS SANS BILAN ----
 # ─────────────────────────────────────────────
-Liste_toutes_STEP_0 <- read_excel("02_data//SITOUREF/SITOUREF_STEP_bassin.xlsx", 
+Liste_toutes_STEP_0 <- read_excel("data/SITOUREF_STEP_bassin.xlsx", 
                                   sheet = "Liste des sitous (autre format)")
 
 
