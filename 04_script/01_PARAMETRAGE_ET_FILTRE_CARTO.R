@@ -36,6 +36,7 @@
   library(tidyr) # pivot de table
   library(tidyverse)
   library(tmap)
+  library(renv)
   ## lors d'un export dans excel permet de garder format date YYYY-MM-DD (sinon peut devenir YYYY-DD-MM)
   options(openxlsx.dateFormat = "yyyy-mm-dd")
   conflict_prefer_all("dplyr")
@@ -47,6 +48,8 @@
 
 
 # 1. IMPORT DU FICHIER DE PARAMETRAGE ----
+renv::restore()
+
 Parametrage <- read_excel("Lancement Utilisateur.xlsm")
 Parametrage<-Parametrage |>
   select(Variable,Valeur) |>
