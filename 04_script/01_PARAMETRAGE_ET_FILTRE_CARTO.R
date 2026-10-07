@@ -136,16 +136,26 @@ data_geo_00$X  <-gsub(",",".",data_geo_00$X ) |>
 data_geo_00$Y  <-gsub(",",".",data_geo_00$Y )|> 
   as.numeric()
 
+na_val<-data_geo_00 |> 
+  filter(is.na(X) | is.na(Y))
+
+data_geo_00<-data_geo_00 |> 
+  filter(!is.na(X) & !is.na(Y))
+
 data_geo_01<-st_as_sf(data_geo_00, coords = c("X","Y"), crs = 2154)
 
 
 
 ## 3.2. FILTRAGE SUR LE PERIMETRE ----
 XY_rejets_filtre<-data_geo_01 |> 
-  filter(str_sub(`No interne Sitou`,-3) == "026") |> #On conserve uniquement
+  filter(str_sub(`No interne Sitou`,-3) == "026") |> #On conserve uniquement les points de rejet
   st_filter(Filtre_buffer)
 
 liste_points_rejet<-XY_rejets_filtre |> 
+  select(`No interne Sitou`)
+
+liste_points_rejet_actifs <-as.data.frame(XY_rejets_filtre) |> 
+  filter(`Situation Sitou`%nin% c("Clos", "Archive") ) |>
   select(`No interne Sitou`)
 
 ## 3.3. CARTO TEST ----
