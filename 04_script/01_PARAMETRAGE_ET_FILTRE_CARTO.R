@@ -1,4 +1,5 @@
 # PACKAGES ET FONCTIONS -----
+if (!exists("lancement"))
 {
   library(conflicted)
   library(cowplot)
@@ -41,14 +42,25 @@
   options(openxlsx.dateFormat = "yyyy-mm-dd")
   conflict_prefer_all("dplyr")
   conflicts_prefer(lubridate::month)
-}
+
+
 
 # FONCTIONS
-`%nin%` <- negate(`%in%`)
+
+  ## FONCTION "NOT IN" : 
+  `%nin%` <- negate(`%in%`)
+  
+# RESTAURATION DE L'ENVIRONNEMENT
+  
+  renv::restore()
+  
+# Marqueur pour éviter de relancer 
+  lancement <-TRUE
+}
 
 
 # 1. IMPORT DU FICHIER DE PARAMETRAGE ----
-renv::restore()
+
 
 Parametrage <- read_excel("Lancement Utilisateur.xlsm")
 Parametrage<-Parametrage |>
@@ -164,3 +176,26 @@ test_map<-ggplot(data=Filtre_buffer)+
    geom_sf(data=Filtre, colour="red", alpha=0.5)+
   geom_sf(data=XY_rejets_filtre)
 print(test_map)
+
+
+# 4. SELECTION DES SITOUS A EXAMINER ----
+table_correspondance_00<-read_xlsx("03_intermediary_data/Table_correspondance.xlsx")
+
+table_correspondance<-table_correspondance_00 |> 
+  filter(rejet %in% liste_points_rejet_actifs[,1])
+
+
+# ZZ. NETTOYAGE DES VARIABLES AVANT DE PASSER AU SCRIPT SUIVANT ----
+rm(list = c(
+  "P",
+  "Filtre_buffer",
+  "table_correspondance_00",
+  "data_geo_00",
+  "data_geo_01",
+  "XY_rejets_filtre",
+  case_when(Parametrage$TYPE_PERIMETRE=="DT"~ "Limites_DT",
+            Parametrage$TYPE_PERIMETRE=="DEPARTEMENT"~ "Limites_Dpt",
+            Parametrage$TYPE_PERIMETRE=="UH"~ "Limites_UH",
+            Parametrage$TYPE_PERIMETRE=="EPCI"~ "Limites_Communes",
+            TRUE ~ "Limites_Custom")
+))

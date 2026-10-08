@@ -83,6 +83,11 @@ n_base<-n_base |>
 Pts_AS_STEU <- read_excel("02_data/SITOUREF/PandaPression_Liste_points_AS_STEP.xlsx")
 
 
+## 1.4. TYPES D'EXUTOIRES ----
+exutoire<-read_excel("02_data/SITOUREF/PandaPression_Exutoire_rejets.xlsx")
+colnames(exutoire)=c("rejet","exutoire_rejet")
+
+
 # 2. CREATION DES TABLES OBJETS ET LIAISONS ----
 
 ## 2.1. CREATION DE LA LISTE DES REJETS A ETUDIER ----
@@ -423,7 +428,21 @@ table_correspondance <- table_correspondance_00 |>
   #' On ajoute un champ "à vérifier" si le site est une STEU et qu'il y a plus 
   #' d'un rejet (un rejet peut venir du A2, du A5, du A4...)
   mutate(a_verifier = ifelse(str_sub(site_origine,-3)=="029" &  
-                               nb_rejet_par_site > 1, "oui",NA))
+                               nb_rejet_par_site > 1, "oui",NA),
+         TYPE = case_when(str_sub(site_origine,-3)=="029" ~ "STEU",
+                          str_sub(site_origine,-3)=="012" & str_sub(pt_AS,-3)=="224" ~ "INDUS",
+                          str_sub(site_origine,-3)=="243" & str_sub(pt_AS,-3)=="242" ~ "SCL",
+                          str_sub(site_origine,-3)!="243" & str_sub(pt_AS,-3)=="242" ~ "supp",
+                          str_sub(site_origine,-3)!="243" & str_detect(nom_rejet,"SCL") ~ "supp",
+                          str_sub(site_origine,-3)=="012" & str_detect(nom_rejet,"du site") ~ "INDUS",
+                          TRUE ~ "A confirmer"
+         )) |> 
+  relocate(TYPE, .after = "rang") |> 
+  filter(TYPE !="supp") |> 
+  left_join(exutoire, by="rejet", relationship = "many-to-many") |> 
+  select(-rang) |> 
+  relocate(exutoire_rejet, .after = "nom_rejet")
+
 
 
 
@@ -434,3 +453,4 @@ ecrire_onglet(wb,"table_correspondance",table_correspondance)
 # ecrire_onglet(wb,"liste_PM_STEU",liste_PM_STEU)
 # ecrire_onglet(wb,)
 saveWorkbook(wb, "03_intermediary_data/Table_correspondance.xlsx", overwrite = TRUE)
+
