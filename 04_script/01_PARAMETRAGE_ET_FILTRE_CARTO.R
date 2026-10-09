@@ -164,11 +164,13 @@ XY_rejets_filtre<-data_geo_01 |>
   st_filter(Filtre_buffer)
 
 liste_points_rejet<-XY_rejets_filtre |> 
-  select(`No interne Sitou`)
+  select(`No interne Sitou`) |> 
+  rename("rejet" = `No interne Sitou`)
 
 liste_points_rejet_actifs <-as.data.frame(XY_rejets_filtre) |> 
   filter(`Situation Sitou`%nin% c("Clos", "Archive") ) |>
-  select(`No interne Sitou`)
+  select(`No interne Sitou`) |> 
+  rename("rejet" = `No interne Sitou`)
 
 ## 3.3. CARTO TEST ----
 test_map<-ggplot(data=Filtre_buffer)+
