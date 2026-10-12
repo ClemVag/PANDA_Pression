@@ -85,7 +85,7 @@ if(Parametrage$TYPE_PERIMETRE[1] == "DT")
 }
 if(Parametrage$TYPE_PERIMETRE[1] == "DEPARTEMENT")
 {
-  Limites_Dpt <-st_read("02_data/CARTO/Departements_AESN.shp")
+  Limites_Dpt <-st_read("02_data/CARTO/DEPARTEMENTS/Departements_AESN.shp")
   Limites_Dpt<-Limites_Dpt %>%
     select(DDEP_L_LIB,geometry) %>%
     rename("ID" = DDEP_L_LIB)
@@ -148,7 +148,7 @@ data_geo_00$X  <-gsub(",",".",data_geo_00$X ) |>
 data_geo_00$Y  <-gsub(",",".",data_geo_00$Y )|> 
   as.numeric()
 
-na_val<-data_geo_00 |> 
+rejets_avec_coordonnees_NA<-data_geo_00 |> 
   filter(is.na(X) | is.na(Y))
 
 data_geo_00<-data_geo_00 |> 
