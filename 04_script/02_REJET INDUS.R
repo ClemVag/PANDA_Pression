@@ -90,7 +90,12 @@ if(exists("table_correspondance"))
     filter(pt_AS %in% table_correspondance$pt_AS)
 }
 
-## 1.3. CALENDRIER ----
+
+# On ne poursuit le reste de la démarche que s'il existe des points d'AS industriel...
+if(nrow(data_SRR_01)>0)
+{
+
+  ## 1.3. CALENDRIER ----
 calendrier<-crossing(as.data.frame(c(1:12)), as.data.frame(min(data_SRR_01$annee):max(data_SRR_01$annee)))
 colnames(calendrier) = c("mois","annee")
 
@@ -352,7 +357,7 @@ write_csv2(
   flux_forfait_export_condens,
   "03_intermediary_data/flux_forfait_export_condens.csv",
   na = "NA")
-
+}
 
 # Z. NETTOYAGE DES VARIABLES INUTILES POUR LA SUITE DE L'ANALYSE ----
 rm(list = c(
