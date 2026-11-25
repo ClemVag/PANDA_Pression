@@ -66,16 +66,15 @@ Table_corresp_Roseau_Sitouref <- read_excel("02_data/SITOUREF/Table_corresp_Rose
 
 ## 3.3. DONNEES DE SITOUREF----
 ### Liste des points d'autosurveillance ----
-#' [TODO] Ajouter le filtre carto ici et laisser R sélectionner la liste de données de DT à importer.
-
 
 # STEP
 
 Liste_points_AS_STEP<-read_excel("02_data/SITOUREF/Liste_points_AS_STEP.xlsx", 
                                  sheet = "STEP")
 Liste_points_AS_STEP <-Liste_points_AS_STEP %>% 
-  select(Sandre_STEP,Nom_STEP,`No interne Sitou`,PP_Nom_Sitou,`Localisation globale`) %>% 
-  rename("Pt_SANDRE" = `Localisation globale`,
+  select(DT,Sandre_STEP,Nom_STEP,`No interne Sitou`,PP_Nom_Sitou,`Localisation globale`) %>% 
+  rename(Code_SANDRE = Sandre_STEP,
+         "Pt_SANDRE" = `Localisation globale`,
          Nom = Nom_STEP,
          PP_No_interne_Sitou = `No interne Sitou`,
          Nom_pt_AS = PP_Nom_Sitou
@@ -86,19 +85,34 @@ Liste_points_AS_STEP <-Liste_points_AS_STEP %>%
 Liste_points_AS_SCL<-read_excel("02_data/SITOUREF/Liste_points_AS_SCL.xlsx", 
                                 sheet = "SCL")
 Liste_points_AS_SCL<-Liste_points_AS_SCL %>% 
-  select(Code_SANDRE_SCL,Nom_SCL,`No interne Sitou`,`Nom Sitou`,LocalisationSitouref) %>% 
-  rename("Pt_SANDRE" = LocalisationSitouref,
-         Nom = Nom_SCL,
-         PP_No_interne_Sitou = `No interne Sitou`,
-         Nom_pt_AS = `Nom Sitou`
+  select(DT,Code_SANDRE_SCL,Nom_SCL,`No interne Sitou`,`Nom Sitou`,LocalisationSitouref,Classe,`Type réseau`) %>% 
+  rename(
+    Code_SANDRE = Code_SANDRE_SCL,
+    Pt_SANDRE = LocalisationSitouref,
+    Nom = Nom_SCL,
+    PP_No_interne_Sitou = `No interne Sitou`,
+    Nom_pt_AS = `Nom Sitou`,
+    Type_reseau = `Type réseau`
   )
 
 for (p in 1:nrow(Liste_points_AS_SCL))
 {  Liste_points_AS_SCL$Type_reseau[p]<-ifelse(is.na(Liste_points_AS_SCL$Type_reseau[p]),
-                                              Table_corresp_Roseau_Sitouref$Type_reseau[which(Table_corresp_Roseau_Sitouref$Code_SANDRE==Liste_points_AS_SCL$Code_SANDRE_SCL[p])],
+                                              Table_corresp_Roseau_Sitouref$Type_reseau[which(Table_corresp_Roseau_Sitouref$Code_SANDRE==Liste_points_AS_SCL$Code_SANDRE[p])],
                                               Liste_points_AS_SCL$Type_reseau[p])
 
 }
+
+## 3.4. SELECTION DES OUVRAGES PERTINENTS ----
+Liste_points_AS_STEP_etudies<-Liste_points_AS_STEP |> 
+  filter(PP_No_interne_Sitou %in% table_correspondance$pt_AS)
+
+Liste_points_AS_SCL_etudies<-Liste_points_AS_SCL |> 
+  filter(PP_No_interne_Sitou %in% table_correspondance$pt_AS)
+
+DT_list <- tibble(DT = unique(c(Liste_points_AS_STEP_etudies$DT, Liste_points_AS_SCL_etudies$DT)))
+
+Ouvrages_list<-tibble(Code_SANDRE = c(unique(Liste_points_AS_STEP_etudies$Code_SANDRE),unique(Liste_points_AS_SCL_etudies$Code_SANDRE)),
+                      type = c(rep("STEP",length(unique(Liste_points_AS_STEP_etudies$Code_SANDRE))),rep("SCL",length(unique(Liste_points_AS_SCL_etudies$Code_SANDRE)))))
 ## 3.4. CHOIX DU FICHIER DE DONNEES DE LA DT ----
 ### 3.4.1. Import fichier de la DT ----
 #' Nouvelle requête en entrée spécifique PANDA Pression : critères :
@@ -118,14 +132,14 @@ for(type in ouvrages)
     
     if(DT != "DTSF")
     {assign(paste0("data_all_",type,"_0_",Annee),
-           read_excel(paste0("02_data/DEQUADO/Données_AS_",type,"_", DT, "_",Annee,".xlsx")))
+           read_excel(paste0("02_data/DEQUADO/Données_AS_",type,"_PPRESSION_", DT, "_",Annee,".xlsx")))
     }else
     {# Pour la DTSF, deux fichiers sont nécessaires : fichier DRIF et DPPC
       
         assign(paste0("data_all_",type,"01"),
-               read_excel(paste0("02_data/DEQUADO/Données_AS_",type,"_DSF_DRIF_",Annee,".xlsx"), sheet = get(type)))
+               read_excel(paste0("02_data/DEQUADO/Données_AS_",type,"_PPRESSION_DSF_DRIF_",Annee,".xlsx"), sheet = get(type)))
         assign(paste0("data_all_",type,"02"),
-               read_excel(paste0("02_data/DEQUADO/Données_AS_",type,"_DSF_DPPC_",Annee,".xlsx"), sheet = get(type)))
+               read_excel(paste0("02_data/DEQUADO/Données_AS_",type,"_PPRESSION_DSF_DPPC_",Annee,".xlsx"), sheet = get(type)))
 
         colnames(paste0("data_all_",type,"02")) <- colnames(paste0("data_all_",type,"01"))
         assign(paste0("data_all_",type,"_0_",Annee),
@@ -136,10 +150,10 @@ for(type in ouvrages)
         # de code pour lire le 2e onglet du fichier de données. 
         #' [TODO] test à faire
         
-        if (length( excel_sheets(paste0("02_data/DEQUADO/Données_AS_",type,"_DSF_DRIF_",Annee,".xlsx")) ) == 2)
+        if (length( excel_sheets(paste0("02_data/DEQUADO/Données_AS_",type,"_PPRESSION_DSF_DRIF_",Annee,".xlsx")) ) == 2)
         {
           assign(paste0("data_all_",type,"02"),
-                 read_excel(paste0("02_data/DEQUADO/Données_AS_",type,"_DSF_DRIF_",Annee,".xlsx"), sheet = 2, col_names = FALSE))
+                 read_excel(paste0("02_data/DEQUADO/Données_AS_",type,"_PPRESSION_DSF_DRIF_",Annee,".xlsx"), sheet = 2, col_names = FALSE))
           colnames(paste0("data_all_",type,"02")) <- colnames(paste0("data_all_",type,"0"))
           assign(paste0("data_all_",type,"_0_",Annee),
                  rbind(paste0("data_all_",type,"_0_",Annee), paste0("data_all_",type,"02")))
@@ -147,11 +161,9 @@ for(type in ouvrages)
        
       
     }  
-      #' Le choix de la feuille est implicite, pour les DT considérées, les fichiers de 
-    #' résultat ne comprennent qu'une seule feuille.
-    #' Si le script doit tourner pour DTSF, ajouter le morceau de code pour ajouter 
-    #' l'ensemble des onglets issu des anciennes versions de PANDA et la sélection
-    #' des 2 fichiers (DRIF et DPPC). 
+    #' Dans la prochaine étape, on renomme les colonnes et on retient uniquement 
+    #' les ouvrages en lien avec les rejets présents sur le périmètre. 
+    #' Cela permettra d'aller plus vite sur la suite de l'analyse.
     
     assign(
       paste0("data_all_", type,"_0_",Annee), 
@@ -169,7 +181,8 @@ for(type in ouvrages)
           Derniere_qualif_analyse = `Dernière qualification analyse`,
           Code_remarque = `Code remarque`,
           Commentaire_analyse = `Commentaire analyse`  
-        ))
+        )) |> 
+      filter(Code_SANDRE %in% Ouvrages_list$Code_SANDRE)
     
     ### 3.4.3. Convertir les colonnes d'un type à un type numeric, date ----
     assign(
@@ -302,22 +315,21 @@ debit_forfaitaire <- tribble(
 
 # Capacité nominale par station pour calcul forfaitaire
 capacite_nominale_STEP <- Table_corresp_Roseau_Sitouref %>%
-  rename(Code_SANDRE_STEP = `Code Sandre STEU Sitouref`,
+  rename(Code_SANDRE = `Code Sandre STEU Sitouref`,
          Capacite_nominale = `Capacité nominale STEU`,
          Direction = DT) %>%
-  select(Code_SANDRE_STEP, Capacite_nominale, Direction)
+  select(Code_SANDRE, Capacite_nominale, Direction)
 
 # Calcul forfait 
 base_A4 <- Liste_points_AS_STEP %>%
   select(
-    Sandre_STEP, PP_No_interne_Sitou, Pt_SANDRE
+    Code_SANDRE, PP_No_interne_Sitou, Pt_SANDRE
   ) %>%
-  rename("Code_SANDRE" = "Sandre_STEP") %>%
   filter(Pt_SANDRE == "A4 - Sortie station") %>%
   left_join(
     capacite_nominale_STEP %>%
-      select(Code_SANDRE_STEP, Capacite_nominale),
-    by= c("Code_SANDRE" = "Code_SANDRE_STEP")
+      select(Code_SANDRE, Capacite_nominale),
+    by= "Code_SANDRE"
   ) %>%
   mutate(Capacite_nominale = as.numeric(Capacite_nominale))
 
@@ -444,9 +456,9 @@ lib_N1 <- c(mesure = "Débit estimé (mesure N-1)", moyenne = "Débit estimé (m
 # --- TOUS les points A4 de Sitouref x tous les jours de l'année N ---
 points_A4 <- Liste_points_AS_STEP %>%
   semi_join(capacite_nominale_STEP %>% filter(Direction ==DT),
-            by = c("Sandre_STEP" = "Code_SANDRE_STEP"))%>%
+            by = c("Code_SANDRE" = "Code_SANDRE"))%>%
   filter(Pt_SANDRE == "A4 - Sortie station") %>%
-  distinct(Code_SANDRE = Sandre_STEP, PP_No_interne_Sitou)
+  distinct(Code_SANDRE = Code_SANDRE, PP_No_interne_Sitou)
 
 cal_A4 <- points_A4 %>%
   crossing(Date_debut_prel = seq.Date(as.Date(paste0(An, "-01-01")),
@@ -860,15 +872,15 @@ flux_repli_deversements <- bind_rows(base_A1_R1, base_A2_A5) %>%
       select(Code_SANDRE, `Code Sandre STEU Sitouref`),
     by ="Code_SANDRE"
   ) %>%
-  rename(Code_SANDRE_STEP_corresp = `Code Sandre STEU Sitouref`) %>%
+  rename(Code_SANDRE_corresp = `Code Sandre STEU Sitouref`) %>%
   mutate(
-    Code_SANDRE_STEP = case_when(
-      Pt_SANDRE %in% c("A1", "R1") ~ Code_SANDRE_STEP_corresp,
+    Code_SANDRE = case_when(
+      Pt_SANDRE %in% c("A1", "R1") ~ Code_SANDRE_corresp,
       Pt_SANDRE %in% c("A2", "A5") ~ Code_SANDRE,
       TRUE ~ NA_character_
     )
   ) %>%
-  select(-Code_SANDRE_STEP_corresp) %>%
+  select(-Code_SANDRE_corresp) %>%
   
   # Priorité 1 : Jour de bilan A3 à la date exacte
   
@@ -878,7 +890,7 @@ flux_repli_deversements <- bind_rows(base_A1_R1, base_A2_A5) %>%
              Date_debut_prel, Concentration)
     %>%
       rename(conc_A3_jour_exact = Concentration),
-    by = c("Code_SANDRE_STEP" = "Code_SANDRE",
+    by = c("Code_SANDRE" = "Code_SANDRE",
            "Code_sandre_parametre" = "Code_sandre_parametre",
            "Date_debut_prel")
   ) %>%
@@ -889,7 +901,7 @@ flux_repli_deversements <- bind_rows(base_A1_R1, base_A2_A5) %>%
     conc_A3_moy_pluie %>%
       select(Code_SANDRE, Code_sandre_parametre,
              Annee,  conc_moy_A3_pluie_N),
-    by = c("Code_SANDRE_STEP" = "Code_SANDRE",
+    by = c("Code_SANDRE" = "Code_SANDRE",
            "Code_sandre_parametre" = "Code_sandre_parametre",
            "Annee"
     )
@@ -899,12 +911,12 @@ flux_repli_deversements <- bind_rows(base_A1_R1, base_A2_A5) %>%
   
   left_join(
     conc_A3_moy_N, 
-    by= c("Code_SANDRE_STEP" = "Code_SANDRE",
+    by= c("Code_SANDRE" = "Code_SANDRE",
           "Code_sandre_parametre",
           "Annee" = "Annee")) %>%
   left_join(
     conc_A3_moy_N1,
-    by = c("Code_SANDRE_STEP" = "Code_SANDRE",
+    by = c("Code_SANDRE" = "Code_SANDRE",
            "Code_sandre_parametre",
            "Annee_N1" = "Annee_A3")) %>%
   
@@ -950,7 +962,7 @@ flux_repli_deversements <- bind_rows(base_A1_R1, base_A2_A5) %>%
   
   # suppression des variables non nécessaires dans le tableau final
   select(-Cas, -conc_A3_jour_exact, -conc_A3_moy_N, -conc_moy_A3_pluie_N, -conc_moy_A3_N1,
-         -Code_SANDRE_STEP, -Annee_N1)
+         -Code_SANDRE, -Annee_N1)
 
 flux_repli_SCL <- flux_repli_deversements %>% filter(Pt_SANDRE %in% c("A1","R1"))
 flux_repli_STEP <- flux_repli_deversements %>% filter(Pt_SANDRE %in% c("A2", "A5"))
