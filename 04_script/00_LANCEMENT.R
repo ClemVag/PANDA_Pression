@@ -44,6 +44,7 @@ if (!exists("lancement"))
          ggplot2,
          conflicted,
          cowplot,
+         data.table,
          dplyr,
          flextable ,
          forcats,
@@ -83,6 +84,7 @@ if (!exists("lancement"))
   options(openxlsx.dateFormat = "yyyy-mm-dd")
   #conflict_prefer_all("dplyr")
   conflicts_prefer(lubridate::month)
+  conflicts_prefer(lubridate::year)
   conflicts_prefer(terra::intersect)
   conflicts_prefer(dplyr::filter)
   
