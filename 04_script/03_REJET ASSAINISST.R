@@ -9,7 +9,7 @@
 # Choix : DVO / DVM / DSF / DSAM / DSAV / DBN
 # Exemple : DT <- "DVO"
 # A remplacer par le paramétrage
-DT <- "DSAV"
+#DT <- "DSAV"
 
 ## 1.2. CHOIX DU SCRIPT ----
 
@@ -35,6 +35,7 @@ library(forcats)
 library(lubridate) # date et heure
 library(tidyr) # pivot de table
 library(openxlsx)
+library(data.table)
 library(zoo)
 ## lors d'un export dans excel permet de garder format date YYYY-MM-DD (sinon peut devenir YYYY-DD-MM)
 options(openxlsx.dateFormat = "yyyy-mm-dd")
@@ -72,13 +73,14 @@ Table_corresp_Roseau_Sitouref <- read_excel("02_data/SITOUREF/Table_corresp_Rose
 Liste_points_AS_STEP<-read_excel("02_data/SITOUREF/Liste_points_AS_STEP.xlsx", 
                                  sheet = "STEP")
 Liste_points_AS_STEP <-Liste_points_AS_STEP %>% 
-  select(DT,Sandre_STEP,Nom_STEP,`No interne Sitou`,PP_Nom_Sitou,`Localisation globale`) %>% 
+  select(DT,Sandre_STEP,Nom_STEP,Capacite_STEP,`No interne Sitou`,PP_Nom_Sitou,LocalisationSitouref) %>% 
   rename(Code_SANDRE = Sandre_STEP,
-         "Pt_SANDRE" = `Localisation globale`,
+         Pt_SANDRE = LocalisationSitouref,
          Nom = Nom_STEP,
          PP_No_interne_Sitou = `No interne Sitou`,
          Nom_pt_AS = PP_Nom_Sitou
-  )
+  ) |> 
+  filter(Pt_SANDRE %in% c("A3","A4","A2","A5"))
 
 #SCL 
 
@@ -111,14 +113,16 @@ Liste_points_AS_SCL_etudies<-Liste_points_AS_SCL |>
 
 DT_list <- tibble(DT = unique(c(Liste_points_AS_STEP_etudies$DT, Liste_points_AS_SCL_etudies$DT)))
 
-Ouvrages_list<-tibble(Code_SANDRE = c(unique(Liste_points_AS_STEP_etudies$Code_SANDRE),unique(Liste_points_AS_SCL_etudies$Code_SANDRE)),
-                      type = c(rep("STEP",length(unique(Liste_points_AS_STEP_etudies$Code_SANDRE))),rep("SCL",length(unique(Liste_points_AS_SCL_etudies$Code_SANDRE)))))
+Ouvrages_list<-data.table(Code_SANDRE = c(unique(Liste_points_AS_STEP_etudies$Code_SANDRE),unique(Liste_points_AS_SCL_etudies$Code_SANDRE)),
+                      type_ouvrage = c(rep("STEP",length(unique(Liste_points_AS_STEP_etudies$Code_SANDRE))),rep("SCL",length(unique(Liste_points_AS_SCL_etudies$Code_SANDRE)))))
+
+
+
 ## 3.4. CHOIX DU FICHIER DE DONNEES DE LA DT ----
 ### 3.4.1. Import fichier de la DT ----
 #' Nouvelle requête en entrée spécifique PANDA Pression : critères :
 #' --- Si point AS = A3 alors Code Sandre paramètre = 1552 ou 1553
 #' --- Si point AS = A2, A4, A5 alors tout Code Sandre paramètre accepté
-#' [TODO] Mettre à jour le nom de la requête après la fin des tests 
 
 # Boucle pour nommer les variables en tant que STEP puis SCL pour simplifier le code
 
@@ -126,21 +130,22 @@ ouvrages <- c("STEP","SCL")
 
 for(type in ouvrages) 
 {
-  
-  ### 3.4.2. Renommer les colonnes ----  
-  for (Annee in fenetre_temps_etendue) {
-    
-    if(DT != "DTSF")
-    {assign(paste0("data_all_",type,"_0_",Annee),
-           read_excel(paste0("02_data/DEQUADO/Données_AS_",type,"_PPRESSION_", DT, "_",Annee,".xlsx")))
-    }else
-    {# Pour la DTSF, deux fichiers sont nécessaires : fichier DRIF et DPPC
+  for(DT in DT_list)
+  {
+
+    for (Annee in fenetre_temps_etendue) {
       
+      if(DT != "DTSF")
+      {assign(paste0("data_all_",type,"_0_",Annee),
+              read_excel(paste0("02_data/DEQUADO/Données_AS_",type,"_PPRESSION_", DT, "_",Annee,".xlsx")))
+      }else
+      {# Pour la DTSF, deux fichiers sont nécessaires : fichier DRIF et DPPC
+        
         assign(paste0("data_all_",type,"01"),
                read_excel(paste0("02_data/DEQUADO/Données_AS_",type,"_PPRESSION_DSF_DRIF_",Annee,".xlsx"), sheet = get(type)))
         assign(paste0("data_all_",type,"02"),
                read_excel(paste0("02_data/DEQUADO/Données_AS_",type,"_PPRESSION_DSF_DPPC_",Annee,".xlsx"), sheet = get(type)))
-
+        
         colnames(paste0("data_all_",type,"02")) <- colnames(paste0("data_all_",type,"01"))
         assign(paste0("data_all_",type,"_0_",Annee),
                rbind(paste0("data_all_",type,"01"), paste0("data_all_",type,"02")))
@@ -158,117 +163,152 @@ for(type in ouvrages)
           assign(paste0("data_all_",type,"_0_",Annee),
                  rbind(paste0("data_all_",type,"_0_",Annee), paste0("data_all_",type,"02")))
         }
-       
+        
+        
+      }  
       
-    }  
-    #' Dans la prochaine étape, on renomme les colonnes et on retient uniquement 
-    #' les ouvrages en lien avec les rejets présents sur le périmètre. 
-    #' Cela permettra d'aller plus vite sur la suite de l'analyse.
-    
-    assign(
-      paste0("data_all_", type,"_0_",Annee), 
-      get(paste0("data_all_",type,"_0_",Annee)) %>%
-        rename(
-          id_analyse = `Code analyse`,
-          Code_SANDRE = `Code SANDRE`,
-          PP_No_interne_Sitou = `PP_No interne Sitou`,
-          Pt_SANDRE = `Pt SANDRE`,
-          Date_debut_prel = `Date début prélèvt`,
-          Date_depot = `Date du dépôt`,
-          Code_sandre_parametre = `Code sandre paramètre`,
-          Code_unite = `Code unité`,
-          Val_resultat_analyse = `Val résultat analyse`,
-          Derniere_qualif_analyse = `Dernière qualification analyse`,
-          Code_remarque = `Code remarque`,
-          Commentaire_analyse = `Commentaire analyse`  
-        )) |> 
-      filter(Code_SANDRE %in% Ouvrages_list$Code_SANDRE)
-    
-    ### 3.4.3. Convertir les colonnes d'un type à un type numeric, date ----
-    assign(
-      paste0("data_all_", type,"_0_",Annee), 
-      get(paste0("data_all_",type,"_0_",Annee)) %>%
-        mutate(Date_debut_prel = as.Date(Date_debut_prel)) %>%
-        mutate(Date_depot = as.Date(Date_depot))
-    ) 
-    
-    ### 3.4.4. Nettoyage des doublons et des caractères problématiques ----
-    # TEST : s'il existe plus d'une date de dépôt, conserver uniquement la donnée la plus récente
-    
-    # récupérer les lignes doublons pour vérification si besoin
-    
-    assign(
-      paste0("tmp_", type), 
-      get_dupes(
-        get(paste0("data_all_",type,"_0_",Annee)),
-        DT,
-        Code_SANDRE,
-        Pt_SANDRE,
-        Code_sandre_parametre,
-        PP_No_interne_Sitou,
-        Date_debut_prel,
-        Date_depot  ))
-    
-    # trier les données pour supprimer les doublons après.
-    
-    
-    assign(
-      paste0("data_all_", type,"_1_",Annee), 
-      get(paste0("data_all_",type,"_0_",Annee)) %>%
-        arrange(
+      #' Dans la prochaine étape, on renomme les colonnes et on retient uniquement 
+      #' les ouvrages en lien avec les rejets présents sur le périmètre. 
+      #' Cela permettra d'aller plus vite sur la suite de l'analyse.
+
+          ### 3.4.2. Renommer les colonnes ----  
+      assign(
+        paste0("data_all_", type,"_0_",Annee), 
+        get(paste0("data_all_",type,"_0_",Annee)) %>%
+          rename(
+            id_analyse = `Code analyse`,
+            Code_SANDRE = `Code SANDRE`,
+            PP_No_interne_Sitou = `PP_No interne Sitou`,
+            Pt_SANDRE = `Pt SANDRE`,
+            Date_debut_prel = `Date début prélèvt`,
+            Date_depot = `Date du dépôt`,
+            Code_sandre_parametre = `Code sandre paramètre`,
+            Code_unite = `Code unité`,
+            Val_resultat_analyse = `Val résultat analyse`,
+            Derniere_qualif_analyse = `Dernière qualification analyse`,
+            Code_remarque = `Code remarque`,
+            Commentaire_analyse = `Commentaire analyse`  
+          )) |> 
+        #' Ici on conserve uniquement dans la liste des ouvrages reliésà un rejet
+        #' présent dans le périmètre identifié
+        filter(Code_SANDRE %in%  Ouvrages_list[type_ouvrage == type]$Code_SANDRE)
+      
+      ### 3.4.3. Convertir les colonnes d'un type à un type numeric, date ----
+      assign(
+        paste0("data_all_", type,"_0_",Annee), 
+        get(paste0("data_all_",type,"_0_",Annee)) %>%
+          mutate(Date_debut_prel = as.Date(Date_debut_prel),
+                 Date_depot = as.Date(Date_depot))
+      ) |> 
+        mutate(
+          # Conversion 1 : Remplacement du code 1098 (Volume) par 1552 (Vol.Moy.J) le cas échéant
+          Code_sandre_parametre = case_when(
+            Code_sandre_parametre == "1098" ~ "1552",
+            TRUE ~ Code_sandre_parametre
+          ),
+          Code_unite = case_when(
+            Code_sandre_parametre == "1552" ~ "120",
+            TRUE ~ Code_unite),
+          
+          # Conversion 2 : Harmonisation des unités des paramètres azotés et Phosphore
+          Val_resultat_analyse =case_when(
+            Code_sandre_parametre == "1335" & Code_unite %in%c("168","395") ~ Val_resultat_analyse*1.2857, #NH4+
+            Code_sandre_parametre == "1339" & Code_unite =="168" ~ Val_resultat_analyse*3.2862, #NO2-
+            Code_sandre_parametre == "1340" & Code_unite =="168" ~ Val_resultat_analyse*4.4287, #NO3-
+            TRUE ~ Val_resultat_analyse),
+          
+          Code_unite = case_when(Code_sandre_parametre == "1335" & Code_unite %in%c("168","395") ~ "169",
+                                 Code_sandre_parametre == "1339" & Code_unite =="168" ~ "171",
+                                 Code_sandre_parametre == "1340" & Code_unite =="168" ~ "173",
+                                 TRUE ~ Code_unite)
+        )
+      
+      ### 3.4.4. Nettoyage des doublons et des caractères problématiques ----
+      # TEST : s'il existe plus d'une date de dépôt, conserver uniquement la donnée la plus récente
+      
+      # récupérer les lignes doublons pour vérification si besoin
+      
+      assign(
+        paste0("tmp_", type), 
+        get_dupes(
+          get(paste0("data_all_",type,"_0_",Annee)),
           DT,
           Code_SANDRE,
           Pt_SANDRE,
           Code_sandre_parametre,
           PP_No_interne_Sitou,
           Date_debut_prel,
-          desc(Date_depot)  ))
-    
-    
-    # supprimer les doublons.
-    
-    assign(
-      paste0("data_all_", type,"_",Annee), 
-      get(paste0("data_all_",type,"_1_",Annee)) %>%
-        distinct(
-          DT,
-          Code_SANDRE,
-          Pt_SANDRE,
-          Code_sandre_parametre,
-          PP_No_interne_Sitou,
-          Date_debut_prel,
-          .keep_all = TRUE
-        ))
-    
-    ### 3.4.5. Liste des paramètres et des couples paramètres/unités ----
-    assign(paste0("data_all_",type),
-           get(paste0("data_all_STEP_",An))
-    )
-    
-    assign(
-      paste0("ListeParam_", type), 
-      distinct(
-        data.frame(
-          Code_sandre_parametre = data_all_STEP$Code_sandre_parametre
+          Date_depot  ))
+      
+      # trier les données pour supprimer les doublons après.
+      
+      assign(
+        paste0("data_all_", type,"_1_",Annee), 
+        get(paste0("data_all_",type,"_0_",Annee)) %>%
+          arrange(
+            DT,
+            Code_SANDRE,
+            Pt_SANDRE,
+            Code_sandre_parametre,
+            PP_No_interne_Sitou,
+            Date_debut_prel,
+            desc(Date_depot)  ))
+      
+      
+      # supprimer les doublons.
+      
+      assign(
+        paste0("data_all_", type,"_",Annee), 
+        get(paste0("data_all_",type,"_1_",Annee)) %>%
+          distinct(
+            DT,
+            Code_SANDRE,
+            Pt_SANDRE,
+            Code_sandre_parametre,
+            PP_No_interne_Sitou,
+            Date_debut_prel,
+            .keep_all = TRUE
+          ))
+      
+      ### 3.4.5. Liste des paramètres et des couples paramètres/unités ----
+      
+      #'[TODO] Ce code comporte des erreurs (sélection uniquement pour les STEP)
+      #'A reprendre 
+      #'
+      #
+      # assign(paste0("data_all_",type),
+      #        get(paste0("data_all_STEP_",Annee))
+      # )
+      # 
+      # assign(
+      #   paste0("ListeParam_", type), 
+      #   distinct(
+      #     data.frame(
+      #       Code_sandre_parametre = data_all_STEP$Code_sandre_parametre
+      #     ))) 
+      # 
+      # assign(
+      #   paste0("ListeParamUnites_", type), 
+      #   distinct(
+      #     data.frame(
+      #       Code_sandre_parametre = data_all_STEP$Code_sandre_parametre,
+      #       Code_unite = data_all_STEP$Code_unite
+      #     ))) 
+      
+      
+      
+      ### 3.4.6. CREATION DE LA LISTE DES STEP et SCL ----
+      assign(
+        paste0("Liste_", type), 
+        data.frame(Code_SANDRE = unique(
+          get(paste0("data_all_",type))$Code_SANDRE
         ))) 
-    
-    assign(
-      paste0("ListeParamUnites_", type), 
-      distinct(
-        data.frame(
-          Code_sandre_parametre = data_all_STEP$Code_sandre_parametre,
-          Code_unite = data_all_STEP$Code_unite
-        ))) 
-    
-    
-    
-    ### 3.4.6. CREATION DE LA LISTE DES STEP et SCL ----
-    assign(
-      paste0("Liste_", type), 
-      data.frame(
-        get(paste0("data_all_",type))$Code_SANDRE
-      )) 
-    
+     
+    ### 3.4.7. SUPPRESSION DES VARIABLES INTERMEDIAIRES ----
+      
+      
+       
+    }
   }
 }
 
@@ -325,7 +365,7 @@ base_A4 <- Liste_points_AS_STEP %>%
   select(
     Code_SANDRE, PP_No_interne_Sitou, Pt_SANDRE
   ) %>%
-  filter(Pt_SANDRE == "A4 - Sortie station") %>%
+  filter(Pt_SANDRE == "A4") %>%
   left_join(
     capacite_nominale_STEP %>%
       select(Code_SANDRE, Capacite_nominale),
