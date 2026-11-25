@@ -23,23 +23,23 @@
 # ──────────────────────────────────────────── ─
 
 # PACKAGES
-library(readxl)
-library(tidyverse)
-library(dplyr)
-library(summarytools)
-library(conflicted)
-conflict_prefer_all("dplyr")
-library(janitor) # doublons
-library(flextable)
-library(forcats)
-library(lubridate) # date et heure
-library(tidyr) # pivot de table
-library(openxlsx)
-library(data.table)
-library(zoo)
-## lors d'un export dans excel permet de garder format date YYYY-MM-DD (sinon peut devenir YYYY-DD-MM)
-options(openxlsx.dateFormat = "yyyy-mm-dd")
-conflicts_prefer(lubridate::month)
+# library(readxl)
+# library(tidyverse)
+# library(dplyr)
+# library(summarytools)
+# library(conflicted)
+# conflict_prefer_all("dplyr")
+# library(janitor) # doublons
+# library(flextable)
+# library(forcats)
+# library(lubridate) # date et heure
+# library(tidyr) # pivot de table
+# library(openxlsx)
+# library(data.table)
+# library(zoo)
+# ## lors d'un export dans excel permet de garder format date YYYY-MM-DD (sinon peut devenir YYYY-DD-MM)
+# options(openxlsx.dateFormat = "yyyy-mm-dd")
+# conflicts_prefer(lubridate::month)
 
 # ──────────────────────────────────────────── ─
 # 3. PREPARATION FICHIER ENTREPOT DE DONNEES ----
@@ -66,7 +66,7 @@ Table_corresp_Roseau_Sitouref <- read_excel("02_data/SITOUREF/Table_corresp_Rose
   rename("Code_SANDRE"=`Code Sandre SCL Sitouref`)
 
 ## 3.3. DONNEES DE SITOUREF----
-### Liste des points d'autosurveillance ----
+### 3.3.1. Liste brute des points d'autosurveillance ----
 
 # STEP
 
@@ -80,7 +80,8 @@ Liste_points_AS_STEP <-Liste_points_AS_STEP %>%
          PP_No_interne_Sitou = `No interne Sitou`,
          Nom_pt_AS = PP_Nom_Sitou
   ) |> 
-  filter(Pt_SANDRE %in% c("A3","A4","A2","A5"))
+  filter(Pt_SANDRE %in% c("A3","A4","A2","A5")) |> 
+  mutate(Capacite_STEP = as.numeric(Capacite_STEP))
 
 #SCL 
 
@@ -97,24 +98,29 @@ Liste_points_AS_SCL<-Liste_points_AS_SCL %>%
     Type_reseau = `Type réseau`
   )
 
-for (p in 1:nrow(Liste_points_AS_SCL))
-{  Liste_points_AS_SCL$Type_reseau[p]<-ifelse(is.na(Liste_points_AS_SCL$Type_reseau[p]),
-                                              Table_corresp_Roseau_Sitouref$Type_reseau[which(Table_corresp_Roseau_Sitouref$Code_SANDRE==Liste_points_AS_SCL$Code_SANDRE[p])],
-                                              Liste_points_AS_SCL$Type_reseau[p])
 
-}
 
-## 3.4. SELECTION DES OUVRAGES PERTINENTS ----
+### 3.3.2. SELECTION DES OUVRAGES PERTINENTS ----
+#### 3.3.2.1. STEU ----
 Liste_points_AS_STEP_etudies<-Liste_points_AS_STEP |> 
   filter(PP_No_interne_Sitou %in% table_correspondance$pt_AS)
 
+#### 3.3.2.2. SCL (avec complétion du type de réseau) ----
 Liste_points_AS_SCL_etudies<-Liste_points_AS_SCL |> 
   filter(PP_No_interne_Sitou %in% table_correspondance$pt_AS)
 
+for (p in 1:nrow(Liste_points_AS_SCL_etudies))
+{  Liste_points_AS_SCL_etudies$Type_reseau[p]<-ifelse(is.na(Liste_points_AS_SCL_etudies$Type_reseau[p]),
+                                                      Table_corresp_Roseau_Sitouref$Type_reseau[which(Table_corresp_Roseau_Sitouref$Code_SANDRE==Liste_points_AS_SCL_etudies$Code_SANDRE[p])],
+                                                      Liste_points_AS_SCL_etudies$Type_reseau[p])
+
+}
+
+### 3.3.3.RECAP DT ET LISTE OUVRAGES ----
 DT_list <- tibble(DT = unique(c(Liste_points_AS_STEP_etudies$DT, Liste_points_AS_SCL_etudies$DT)))
 
 Ouvrages_list<-data.table(Code_SANDRE = c(unique(Liste_points_AS_STEP_etudies$Code_SANDRE),unique(Liste_points_AS_SCL_etudies$Code_SANDRE)),
-                      type_ouvrage = c(rep("STEP",length(unique(Liste_points_AS_STEP_etudies$Code_SANDRE))),rep("SCL",length(unique(Liste_points_AS_SCL_etudies$Code_SANDRE)))))
+                          type_ouvrage = c(rep("STEP",length(unique(Liste_points_AS_STEP_etudies$Code_SANDRE))),rep("SCL",length(unique(Liste_points_AS_SCL_etudies$Code_SANDRE)))))
 
 
 
@@ -128,40 +134,37 @@ Ouvrages_list<-data.table(Code_SANDRE = c(unique(Liste_points_AS_STEP_etudies$Co
 
 ouvrages <- c("STEP","SCL")
 
+
 for(type in ouvrages) 
 {
+  # On crée un compteur pour incrémenter le nombre d'itérations pour chaque type d'ouvrage
+  compteur_incrementation = 1
+  
   for(DT in DT_list)
   {
-
+    
     for (Annee in fenetre_temps_etendue) {
       
       if(DT != "DTSF")
-      {assign(paste0("data_all_",type,"_0_",Annee),
-              read_excel(paste0("02_data/DEQUADO/Données_AS_",type,"_PPRESSION_", DT, "_",Annee,".xlsx")))
+      { data_AS_0 <- read_excel(paste0("02_data/DEQUADO/Données_AS_",type,"_PPRESSION_", DT, "_",Annee,".xlsx"))
       }else
       {# Pour la DTSF, deux fichiers sont nécessaires : fichier DRIF et DPPC
         
-        assign(paste0("data_all_",type,"01"),
-               read_excel(paste0("02_data/DEQUADO/Données_AS_",type,"_PPRESSION_DSF_DRIF_",Annee,".xlsx"), sheet = get(type)))
-        assign(paste0("data_all_",type,"02"),
-               read_excel(paste0("02_data/DEQUADO/Données_AS_",type,"_PPRESSION_DSF_DPPC_",Annee,".xlsx"), sheet = get(type)))
+        data_AS_01<-read_excel(paste0("02_data/DEQUADO/Données_AS_",type,"_PPRESSION_DSF_DRIF_",Annee,".xlsx"))
+        data_AS_02<-read_excel(paste0("02_data/DEQUADO/Données_AS_",type,"_PPRESSION_DSF_DPPC_",Annee,".xlsx"))
         
-        colnames(paste0("data_all_",type,"02")) <- colnames(paste0("data_all_",type,"01"))
-        assign(paste0("data_all_",type,"_0_",Annee),
-               rbind(paste0("data_all_",type,"01"), paste0("data_all_",type,"02")))
+        colnames(data_AS_02) <- colnames(data_AS_01)
+         data_AS_0<-rbind(data_AS_01, data_AS_02)
         
         # Pour DTSF-DRIF, certains fichiers de données peuvent être scindés en deux
         # car il sont particulièrement longs. Dans ce cas, on utilise ce bloc 
         # de code pour lire le 2e onglet du fichier de données. 
-        #' [TODO] test à faire
-        
+
         if (length( excel_sheets(paste0("02_data/DEQUADO/Données_AS_",type,"_PPRESSION_DSF_DRIF_",Annee,".xlsx")) ) == 2)
         {
-          assign(paste0("data_all_",type,"02"),
-                 read_excel(paste0("02_data/DEQUADO/Données_AS_",type,"_PPRESSION_DSF_DRIF_",Annee,".xlsx"), sheet = 2, col_names = FALSE))
-          colnames(paste0("data_all_",type,"02")) <- colnames(paste0("data_all_",type,"0"))
-          assign(paste0("data_all_",type,"_0_",Annee),
-                 rbind(paste0("data_all_",type,"_0_",Annee), paste0("data_all_",type,"02")))
+          data_AS_02<-read_excel(paste0("02_data/DEQUADO/Données_AS_",type,"_PPRESSION_DSF_DRIF_",Annee,".xlsx"), sheet = 2, col_names = FALSE)
+          colnames(data_AS_02) <- colnames( data_AS_0)
+           data_AS_0 <-rbind( data_AS_0, data_AS_02)
         }
         
         
@@ -170,11 +173,9 @@ for(type in ouvrages)
       #' Dans la prochaine étape, on renomme les colonnes et on retient uniquement 
       #' les ouvrages en lien avec les rejets présents sur le périmètre. 
       #' Cela permettra d'aller plus vite sur la suite de l'analyse.
-
-          ### 3.4.2. Renommer les colonnes ----  
-      assign(
-        paste0("data_all_", type,"_0_",Annee), 
-        get(paste0("data_all_",type,"_0_",Annee)) %>%
+      
+      ### 3.4.2. Renommer les colonnes ----  
+      data_AS_1<-data_AS_0 |> 
           rename(
             id_analyse = `Code analyse`,
             Code_SANDRE = `Code SANDRE`,
@@ -188,18 +189,16 @@ for(type in ouvrages)
             Derniere_qualif_analyse = `Dernière qualification analyse`,
             Code_remarque = `Code remarque`,
             Commentaire_analyse = `Commentaire analyse`  
-          )) |> 
+          )%>%
         #' Ici on conserve uniquement dans la liste des ouvrages reliésà un rejet
         #' présent dans le périmètre identifié
-        filter(Code_SANDRE %in%  Ouvrages_list[type_ouvrage == type]$Code_SANDRE)
+        
+        filter(Code_SANDRE %in%  Ouvrages_list[type_ouvrage == type]$Code_SANDRE) %>%
       
       ### 3.4.3. Convertir les colonnes d'un type à un type numeric, date ----
-      assign(
-        paste0("data_all_", type,"_0_",Annee), 
-        get(paste0("data_all_",type,"_0_",Annee)) %>%
-          mutate(Date_debut_prel = as.Date(Date_debut_prel),
-                 Date_depot = as.Date(Date_depot))
-      ) |> 
+       mutate(Date_debut_prel = as.Date(Date_debut_prel),
+                 Date_depot = as.Date(Date_depot))%>%
+      
         mutate(
           # Conversion 1 : Remplacement du code 1098 (Volume) par 1552 (Vol.Moy.J) le cas échéant
           Code_sandre_parametre = case_when(
@@ -241,10 +240,7 @@ for(type in ouvrages)
           Date_depot  ))
       
       # trier les données pour supprimer les doublons après.
-      
-      assign(
-        paste0("data_all_", type,"_1_",Annee), 
-        get(paste0("data_all_",type,"_0_",Annee)) %>%
+      data_AS_2 <- data_AS_1 %>%
           arrange(
             DT,
             Code_SANDRE,
@@ -252,14 +248,11 @@ for(type in ouvrages)
             Code_sandre_parametre,
             PP_No_interne_Sitou,
             Date_debut_prel,
-            desc(Date_depot)  ))
+            desc(Date_depot))
       
       
       # supprimer les doublons.
-      
-      assign(
-        paste0("data_all_", type,"_",Annee), 
-        get(paste0("data_all_",type,"_1_",Annee)) %>%
+      data_AS <- data_AS_2 %>%
           distinct(
             DT,
             Code_SANDRE,
@@ -268,17 +261,16 @@ for(type in ouvrages)
             PP_No_interne_Sitou,
             Date_debut_prel,
             .keep_all = TRUE
-          ))
+          )
       
       ### 3.4.5. Liste des paramètres et des couples paramètres/unités ----
       
       #'[TODO] Ce code comporte des erreurs (sélection uniquement pour les STEP)
       #'A reprendre 
       #'
-      #
-      # assign(paste0("data_all_",type),
-      #        get(paste0("data_all_STEP_",Annee))
-      # )
+      #'[REPRENDRE ICI]
+      assign(paste0("data_all_",type,"_",Annee),
+             data_AS)
       # 
       # assign(
       #   paste0("ListeParam_", type), 
@@ -297,31 +289,54 @@ for(type in ouvrages)
       
       
       
-      ### 3.4.6. CREATION DE LA LISTE DES STEP et SCL ----
-      assign(
-        paste0("Liste_", type), 
-        data.frame(Code_SANDRE = unique(
-          get(paste0("data_all_",type))$Code_SANDRE
-        ))) 
-     
-    ### 3.4.7. SUPPRESSION DES VARIABLES INTERMEDIAIRES ----
       
       
-       
+      ### 3.4.6. SUPPRESSION DES VARIABLES INTERMEDIAIRES ----
+      
+      
+      
+      if(compteur_incrementation == 1)
+      {
+        assign(paste0("data_all_",type),
+               get(paste0("data_all_",type,"_",Annee)))
+      } else {
+        assign(paste0("data_all_",type),
+               rbind(get(paste0("data_all_",type)),get(paste0("data_all_",type,"_",Annee))))
+      }
+      
+      compteur_incrementation <- compteur_incrementation+1 
+      rm(list = c(
+        paste0("data_all_",type,"_0_",Annee),
+        paste0("data_all_",type,"_1_",Annee),
+        paste0("data_all_",type,"_",Annee)))
     }
+    
   }
+  ### 3.4.7. CREATION DE LA LISTE DES STEP et SCL ----
+  assign(
+    paste0("Liste_", type),
+    unique(get(paste0("data_all_",type))$Code_SANDRE))
+  
 }
 
+
+
+
 # ──────────────────────────────────────────── ─
-## 4.1. PARAMETRES DE FLUX ----
+# 4. CALCUL DE FLUX ----
 # ──────────────────────────────────────────── ─
 
+## 4.1. PARAMETRAGE DU CALCUL DE FLUX  ---- 
 params_flux <- read_excel("02_data/BASE/Table_Param_Unites.xlsx") %>% 
   rename("Code_sandre_parametre"=`Code sandre paramètre`,
          "Code_unite"= `Code unité`,
-         "Unite_ref" = `Unité référence ?`) %>%
-  filter(Code_sandre_parametre %in% c("1313","1314","1305","1319","1335","1339","1340","1551","1350"),
-         Unite_ref == "Oui")
+         "Unite_ref" = `Unité référence ?`)  #%>%
+# filter(Code_sandre_parametre %in% c("1313","1314","1305","1319","1335","1339","1340","1551","1350"),
+#        Unite_ref == "Oui")
+
+#' [TODO] Ajouter le code pour convertir les unités sur la table de données utilisée.
+
+
 
 code_debit <- "1552"  # Vol.Moy.J. en m3/j
 GAP_MAX_JOURS <- 7 # au-delà, un trou de débit n'est plus interpolé
@@ -332,6 +347,7 @@ pts_rejet  <- c("A1", "R1","A2", "A4", "A5")
 
 code_pluvio <- "1553" # pluviométrie en mm
 
+## 4.2. CALCUL FLUX FORFAITAIRES EN A4 ---- 
 # Calcul forfaitaire A4 si absence données N et N-1
 # forfait dépollution : Traitement biologique sans nitrification ni déphosphatation
 conc_forfaitaire_A4 <- tribble(
@@ -352,47 +368,36 @@ debit_forfaitaire <- tribble(
   ~Code_sandre_parametre, ~d_forfait,
   "1552", 0.150 # / EH m3 (150L/j/hab)
 )
+#' [TODO] Alternative à voir avec Romain : prendre le volume en A3. 
 
-# Capacité nominale par station pour calcul forfaitaire
-capacite_nominale_STEP <- Table_corresp_Roseau_Sitouref %>%
-  rename(Code_SANDRE = `Code Sandre STEU Sitouref`,
-         Capacite_nominale = `Capacité nominale STEU`,
-         Direction = DT) %>%
-  select(Code_SANDRE, Capacite_nominale, Direction)
 
 # Calcul forfait 
-base_A4 <- Liste_points_AS_STEP %>%
+base_A4 <- Liste_points_AS_STEP_etudies %>%
   select(
-    Code_SANDRE, PP_No_interne_Sitou, Pt_SANDRE
+    Code_SANDRE, PP_No_interne_Sitou, Pt_SANDRE, Capacite_STEP
   ) %>%
-  filter(Pt_SANDRE == "A4") %>%
-  left_join(
-    capacite_nominale_STEP %>%
-      select(Code_SANDRE, Capacite_nominale),
-    by= "Code_SANDRE"
-  ) %>%
-  mutate(Capacite_nominale = as.numeric(Capacite_nominale))
+  filter(Pt_SANDRE == "A4") 
 
 # Flux A4
 flux_forfait_A4 <- base_A4 %>%
-  inner_join(conc_forfaitaire_A4, by=character()) %>%
+  cross_join(conc_forfaitaire_A4) %>%
   mutate(
-    Flux_kg_j_forfait = Capacite_nominale * C_forfait) %>%
-  select(-C_forfait,-Capacite_nominale)
+    Flux_kg_j_forfait = Capacite_STEP * C_forfait) %>%
+  select(-C_forfait,-Capacite_STEP)
 
 # Débit A4
 debit_forfait_A4 <- base_A4 %>%
   inner_join(debit_forfaitaire, by= character())%>%
-  mutate(Debit_forfait = Capacite_nominale * d_forfait) %>%
-  select(-d_forfait, -Capacite_nominale)
+  mutate(Debit_forfait = Capacite_STEP * d_forfait) %>%
+  select(-d_forfait, -Capacite_STEP)
 
-# ──────────────────────────────────────────── ─
-# 4.2. PREPARATION DES DONNEES ----
+
+## 4.2. PREPARATION DES DONNEES ----
 # ──────────────────────────────────────────── ─
 
 ### 4.2.1. Pluviométries journalières ----
 
-data_pluvio <- get(paste0("data_all_STEP_",An)) %>%
+data_pluvio <- get(paste0("data_all_STEP_",Annee)) %>%
   filter(
     #Pt_SANDRE == "A3",
     Code_sandre_parametre == code_pluvio
@@ -414,7 +419,7 @@ data_pluvio <- get(paste0("data_all_STEP_",An)) %>%
 
 for (type in ouvrages) {
   assign(paste0("data_rejet_",type),
-         get(paste0("data_all_",type,"_",An)) %>%
+         get(paste0("data_all_",type,"_",Annee)) %>%
            filter(Pt_SANDRE %in% c(pts_rejet,"A3"))
   )
   
@@ -468,7 +473,7 @@ for (type in ouvrages) {
 ### 4.2.3. DEBITS A4 ----
 
 # Les débits
-data_debit_A4_N1 <- get(paste0("data_all_STEP_", An - 1)) %>%
+data_debit_A4_N1 <- get(paste0("data_all_STEP_", Annee - 1)) %>%
   filter(Pt_SANDRE == "A4", Code_sandre_parametre == code_debit) %>%
   select(Code_SANDRE, PP_No_interne_Sitou, Date_debut_prel, 
          Val_resultat_analyse, Derniere_qualif_analyse) %>%
@@ -479,7 +484,7 @@ debit_forfait_pt <- debit_forfait_A4 %>%
   distinct(Code_SANDRE, PP_No_interne_Sitou, Debit_forfait)
 
 # Les concentrations
-data_conc_A4_N1 <- get(paste0("data_all_STEP_", An - 1)) %>%
+data_conc_A4_N1 <- get(paste0("data_all_STEP_", Annee - 1)) %>%
   filter(Pt_SANDRE == "A4",
          Code_sandre_parametre %in% params_flux$Code_sandre_parametre,
          !is.na(Val_resultat_analyse)) %>%
@@ -493,7 +498,7 @@ lib_N  <- c(mesure = "Débit mesuré", moyenne = "Débit estimé - moyenne annue
 lib_N1 <- c(mesure = "Débit estimé (mesure N-1)", moyenne = "Débit estimé (moyenne N-1)",
             interpole = "Débit estimé reconstitué N-1",aucun = "Aucun débit")
 
-# --- TOUS les points A4 de Sitouref x tous les jours de l'année N ---
+# TOUS les points A4 de Sitouref x tous les jours de l'année N ---
 points_A4 <- Liste_points_AS_STEP %>%
   semi_join(capacite_nominale_STEP %>% filter(Direction ==DT),
             by = c("Code_SANDRE" = "Code_SANDRE"))%>%
@@ -501,8 +506,8 @@ points_A4 <- Liste_points_AS_STEP %>%
   distinct(Code_SANDRE = Code_SANDRE, PP_No_interne_Sitou)
 
 cal_A4 <- points_A4 %>%
-  crossing(Date_debut_prel = seq.Date(as.Date(paste0(An, "-01-01")),
-                                      as.Date(paste0(An, "-12-31")), by = "day"))
+  crossing(Date_debut_prel = seq.Date(as.Date(paste0(Annee, "-01-01")),
+                                      as.Date(paste0(Annee, "-12-31")), by = "day"))
 
 brut_debit_N <- data_debit_STEP %>%
   filter(Pt_SANDRE == "A4") %>%
@@ -541,7 +546,7 @@ debit_A4_cascade <- debit_A4_N %>%
   select(-Debit_N1, -Source_N1, -Debit_forfait)
 
 # ──────────────────────────────────────────── ─
-# 4.3. CALCUL DES FLUX JOURNALIERS — METHODE DECAPOL ----
+## 4.3. CALCUL DES FLUX JOURNALIERS — METHODE DECAPOL ----
 #
 # Jours AVEC mesure de concentration :
 #   Flux_j = Concentration × Debit_j × 1e-3
@@ -554,7 +559,7 @@ debit_A4_cascade <- debit_A4_N %>%
 # (flux moyen annuel / débit moyen annuel sur jours de mesure)
 # ──────────────────────────────────────────── ─ 
 
-## 4.3.1. Grille complète : tous les jours avec débit × tous les paramètres ----
+### 4.3.1. Grille complète : tous les jours avec débit × tous les paramètres ----
 
 for (type in ouvrages) {
   assign(paste0("grille_jours_",type),
@@ -579,7 +584,7 @@ grille_jours_STEP <- grille_jours_STEP %>%
       crossing(params_flux %>% select(Code_sandre_parametre))
   )
 
-## 4.3.2. Flux sur les jours de bilan = concentrations x volume ----
+### 4.3.2. Flux sur les jours de bilan = concentrations x volume ----
 for (type in ouvrages) {
   assign(paste0("flux_",type),
          get(paste0("grille_jours_",type)) %>%
@@ -605,7 +610,7 @@ for (type in ouvrages) {
            )
   )
 }
-## 4.3.3. Flux réel nul = Jours sans déversements et à débit nul ----
+### 4.3.3. Flux réel nul = Jours sans déversements et à débit nul ----
 for (type in ouvrages) {
   assign(paste0("flux_debit_nul_",type), 
          get(paste0("grille_jours_",type)) %>%
@@ -631,8 +636,8 @@ for (type in ouvrages) {
   )
 }
 
-# 4.3.4. FLUX A4 HORS JOURS DE BILAN — TABLE UNIQUE DES CAS ----
-## 4.3.4.1. Ratios Décapol pour reconstitué les flux à partir des bilans ----
+###  4.3.4. FLUX A4 HORS JOURS DE BILAN — TABLE UNIQUE DES CAS ----
+#### 4.3.4.1. Ratios Décapol pour reconstitué les flux à partir des bilans ----
 
 # Ratio Décapol annuel N (bilans à débit MESURÉ uniquement)
 ratio_decapol <- flux_STEP %>%
@@ -696,7 +701,7 @@ ratio_decapol_N1 <- data_conc_A4_N1 %>%
   filter(!is.na(Date_debut_prel)) %>%
   inner_join(debit_N1_ratio,
              by = c("Code_SANDRE", "PP_No_interne_Sitou", "Date_debut_prel")) %>%
-  mutate(Annee_N1  = An-1,
+  mutate(Annee_N1  = Annee-1,
          Flux_kg_j = Concentration * Debit_m3j * 1e-3,
          Fiabilite_bilan = fiab_bilan(Qualif_debit, Qualif_conc)) %>%
   group_by(Annee_N1, Code_SANDRE, PP_No_interne_Sitou, Code_sandre_parametre) %>%
@@ -708,7 +713,7 @@ ratio_decapol_N1 <- data_conc_A4_N1 %>%
     .groups = "drop"
   )
 
-## 4.3.4.2. Table unique des cas ----
+#### 4.3.4.2. Table unique des cas ----
 
 cles_jour <- c("Code_SANDRE", "PP_No_interne_Sitou", "Code_sandre_parametre", "Date_debut_prel")
 
@@ -719,9 +724,9 @@ jours_deja_traites <- bind_rows(
 
 flux_A4_cas <- debit_A4_cascade %>%
   crossing(params_flux %>% select(Code_sandre_parametre)) %>%
-  mutate(Annee    = An,
+  mutate(Annee    = Annee,
          Mois     = month(Date_debut_prel),
-         Annee_N1 = An - 1) %>%
+         Annee_N1 = Annee - 1) %>%
   anti_join(jours_deja_traites, by = cles_jour) %>%
   left_join(ratio_decapol_mensuel %>%
               select(Code_SANDRE, PP_No_interne_Sitou, Code_sandre_parametre, Annee, Mois, C_pond_mois, Qualif_base_mois),
@@ -780,7 +785,7 @@ flux_A4_cas <- debit_A4_cascade %>%
     )
   )
 
-## 4.3.4.3. DIAGNOSTIC : où sont les cas manquants ? ----
+#### 4.3.4.3. DIAGNOSTIC : où sont les cas manquants ? ----
 
 diag_cas_A4 <- flux_A4_cas %>%
   count(Cas, Source_debit, name = "Nb_jours_x_param") %>%
@@ -796,7 +801,7 @@ diag_sans_debit_A4 <- flux_A4_cas %>%
   filter(Prop_sans_debit > 0) %>%
   arrange(desc(Prop_sans_debit))
 
-## 4.3.4.4. Sortie (même rôle que l'ancien flux_repli_A4, y compris les STEP absentes en N) ----
+#### 4.3.4.4. Sortie (même rôle que l'ancien flux_repli_A4, y compris les STEP absentes en N) ----
 
 flux_repli_A4 <- flux_A4_cas %>%
   filter(!is.na(Flux_kg_j)) %>%
@@ -805,7 +810,7 @@ flux_repli_A4 <- flux_A4_cas %>%
          Annee, Mois, Concentration, Flux_kg_j, Source_flux, Fiabilite_flux)
 
 
-## 4.3.5 Estimation en cas de déversements sans charges polluantes transmises ----
+### 4.3.5 Estimation en cas de déversements sans charges polluantes transmises ----
 #Jours sans déversements mais à débit non nul = flux à estimer avec A3 
 
 ### 1.Calcul des différents cas d'estimation des flux rejetés ----
@@ -866,7 +871,7 @@ conc_A3_moy_N <- conc_A3_jour %>%
 
 # Priorité 4 = Moyenne [A3] année N-1, tout temps confondu 
 
-conc_A3_moy_N1 <- get(paste0("data_all_STEP_",An-1)) %>%
+conc_A3_moy_N1 <- get(paste0("data_all_STEP_",Annee-1)) %>%
   filter(
     Pt_SANDRE == "A3",
     Code_sandre_parametre %in% params_flux$Code_sandre_parametre,
@@ -1007,7 +1012,7 @@ flux_repli_deversements <- bind_rows(base_A1_R1, base_A2_A5) %>%
 flux_repli_SCL <- flux_repli_deversements %>% filter(Pt_SANDRE %in% c("A1","R1"))
 flux_repli_STEP <- flux_repli_deversements %>% filter(Pt_SANDRE %in% c("A2", "A5"))
 
-## 4.3.6 Assemblage final----
+### 4.3.6 Assemblage final----
 # STEP   
 data_flux_j_STEP <- flux_STEP %>%
   bind_rows(flux_debit_nul_STEP, flux_repli_A4, flux_repli_STEP) %>%
@@ -1047,7 +1052,10 @@ data_flux_j_SCL <- flux_SCL %>%
 # comme débit et concentration
 
 # ──────────────────────────────────────────── ─
-# 4.4. FLUX MENSUEL ----
+# 5. EXPORT DES FLUX ----
+# ──────────────────────────────────────────── ─
+
+## 5.1. FLUX MENSUEL ----
 # ──────────────────────────────────────────── ─
 for (type in ouvrages) {
   assign(paste0("flux_mois_",type), 
@@ -1075,8 +1083,8 @@ for (type in ouvrages) {
   )
 }
 
-# ──────────────────────────────────────────── ─
-# 4.5. FLUX ANNUEL ----
+
+## 5.2. FLUX ANNUEL ----
 # ──────────────────────────────────────────── ─
 
 for (type in ouvrages) {
@@ -1102,25 +1110,14 @@ for (type in ouvrages) {
   )
 }
 
-# ──────────────────────────────────────────── ─
-# 4.6. EXPORT EXCEL ----
+
+## 5.3. EXPORT EXCEL ----
 # ──────────────────────────────────────────── ─
 
 dir.create("resultat", showWarnings = FALSE)
 
-# Définition de la fonction ecrire_onglet
 
-# ecrire_onglet <- function(wb, nom, data) {
-#   addWorksheet(wb, nom)
-#   writeData(wb, nom, data, headerStyle = entete)
-#   addStyle(wb, nom, style = autres_lignes,
-#            rows = 2:(nrow(data) + 1), cols = 1:ncol(data),
-#            gridExpand = TRUE)
-#   setColWidths(wb, nom, cols = 1:ncol(data), widths = "auto")
-#   freezePane(wb, nom, firstRow = TRUE)
-# }
-
-# ── Fichier flux journalier par département ───
+### ── Fichier flux journalier par département ----
 
 # STEP
 data_flux_j_STEP <- data_flux_j_STEP %>%
@@ -1134,7 +1131,7 @@ for (dept in liste_dept_STEP) {
     select(-Departement)
   
   nom_fichier_dept_STEP <- paste0(
-    "resultat/STEP/Flux_journaliers_STEP_Dep_",dept,"_",DT,"_",An,".xlsx"
+    "resultat/STEP/Flux_journaliers_STEP_Dep_",dept,"_",DT,"_",Annee,".xlsx"
   )
   
   wb_dept <- createWorkbook()
@@ -1156,7 +1153,7 @@ for (dept in liste_dept_SCL) {
     select(-Departement)
   
   nom_fichier_dept_SCL <- paste0(
-    "resultat/SCL/Flux_journaliers_SCL_Dep_",dept,"_",DT,"_",An,".xlsx"
+    "resultat/SCL/Flux_journaliers_SCL_Dep_",dept,"_",DT,"_",Annee,".xlsx"
   )
   
   wb_dept <- createWorkbook()
@@ -1166,9 +1163,9 @@ for (dept in liste_dept_SCL) {
   message("✔ Export terminé : ", nom_fichier_dept_SCL)
 }
 
-# ── Fichier flux mensuel ──────────────────────
+### ── Fichier flux mensuel ──────────────────────
 for (type in ouvrages) {
-  fichier_flux_mois <- paste0("resultat/",type,"/Flux_mois_",type,"_",DT,"_",An,".xlsx")
+  fichier_flux_mois <- paste0("resultat/",type,"/Flux_mois_",type,"_",DT,"_",Annee,".xlsx")
   
   wb <- createWorkbook()
   ecrire_onglet(wb, "Flux_mensuels", get(paste0("flux_mois_",type)))
@@ -1180,9 +1177,9 @@ for (type in ouvrages) {
 }
 
 
-# ── Fichier flux annuel ──────────────────────
+### ── Fichier flux annuel ──────────────────────
 for (type in ouvrages) {
-  fichier_flux_annuel <- paste0("resultat/",type,"/Flux_annuel_",type,"_",DT,"_",An,".xlsx")
+  fichier_flux_annuel <- paste0("resultat/",type,"/Flux_annuel_",type,"_",DT,"_",Annee,".xlsx")
   
   wb <- createWorkbook()
   ecrire_onglet(wb, "Flux_annuels", get(paste0("flux_annuel_",type)))
