@@ -66,6 +66,8 @@ Table_corresp_Roseau_Sitouref <- read_excel("02_data/SITOUREF/Table_corresp_Rose
 
 ## 3.3. DONNEES DE SITOUREF----
 ### Liste des points d'autosurveillance ----
+#' [TODO] Ajouter le filtre carto ici et laisser R sélectionner la liste de données de DT à importer.
+
 
 # STEP
 
@@ -99,16 +101,10 @@ for (p in 1:nrow(Liste_points_AS_SCL))
 }
 ## 3.4. CHOIX DU FICHIER DE DONNEES DE LA DT ----
 ### 3.4.1. Import fichier de la DT ----
-# Choisir la requête sur l'entrepot de données utilisée pour PANDA
-for (Annee in fenetre_temps_etendue){
-  if (DT %in% c("DVO", "DVM", "DBN", "DSAM", "DSAV")) {
-    assign(paste0("data_all_STEP_0_",Annee),
-           read_excel(paste0("02_data/DEQUADO/Données_AS_STEP_", DT,"_",Annee, ".xlsx"), sheet = "STEP"))
-    assign(paste0("data_all_SCL_0_",Annee),
-           read_excel(paste0("02_data/DEQUADO/Données_AS_SCL_", DT, "_",Annee,".xlsx"), sheet = "Réseaux"))
-    
-  } 
-}
+#' Nouvelle requête en entrée spécifique PANDA Pression : critères :
+#' --- Si point AS = A3 alors Code Sandre paramètre = 1552 ou 1553
+#' --- Si point AS = A2, A4, A5 alors tout Code Sandre paramètre accepté
+#' [TODO] Mettre à jour le nom de la requête après la fin des tests 
 
 # Boucle pour nommer les variables en tant que STEP puis SCL pour simplifier le code
 
@@ -118,7 +114,44 @@ for(type in ouvrages)
 {
   
   ### 3.4.2. Renommer les colonnes ----  
-  for (Annee in c(An, An-1)) {
+  for (Annee in fenetre_temps_etendue) {
+    
+    if(DT != "DTSF")
+    {assign(paste0("data_all_",type,"_0_",Annee),
+           read_excel(paste0("02_data/DEQUADO/Données_AS_",type,"_", DT, "_",Annee,".xlsx")))
+    }else
+    {# Pour la DTSF, deux fichiers sont nécessaires : fichier DRIF et DPPC
+      
+        assign(paste0("data_all_",type,"01"),
+               read_excel(paste0("02_data/DEQUADO/Données_AS_",type,"_DSF_DRIF_",Annee,".xlsx"), sheet = get(type)))
+        assign(paste0("data_all_",type,"02"),
+               read_excel(paste0("02_data/DEQUADO/Données_AS_",type,"_DSF_DPPC_",Annee,".xlsx"), sheet = get(type)))
+
+        colnames(paste0("data_all_",type,"02")) <- colnames(paste0("data_all_",type,"01"))
+        assign(paste0("data_all_",type,"_0_",Annee),
+               rbind(paste0("data_all_",type,"01"), paste0("data_all_",type,"02")))
+        
+        # Pour DTSF-DRIF, certains fichiers de données peuvent être scindés en deux
+        # car il sont particulièrement longs. Dans ce cas, on utilise ce bloc 
+        # de code pour lire le 2e onglet du fichier de données. 
+        #' [TODO] test à faire
+        
+        if (length( excel_sheets(paste0("02_data/DEQUADO/Données_AS_",type,"_DSF_DRIF_",Annee,".xlsx")) ) == 2)
+        {
+          assign(paste0("data_all_",type,"02"),
+                 read_excel(paste0("02_data/DEQUADO/Données_AS_",type,"_DSF_DRIF_",Annee,".xlsx"), sheet = 2, col_names = FALSE))
+          colnames(paste0("data_all_",type,"02")) <- colnames(paste0("data_all_",type,"0"))
+          assign(paste0("data_all_",type,"_0_",Annee),
+                 rbind(paste0("data_all_",type,"_0_",Annee), paste0("data_all_",type,"02")))
+        }
+       
+      
+    }  
+      #' Le choix de la feuille est implicite, pour les DT considérées, les fichiers de 
+    #' résultat ne comprennent qu'une seule feuille.
+    #' Si le script doit tourner pour DTSF, ajouter le morceau de code pour ajouter 
+    #' l'ensemble des onglets issu des anciennes versions de PANDA et la sélection
+    #' des 2 fichiers (DRIF et DPPC). 
     
     assign(
       paste0("data_all_", type,"_0_",Annee), 
@@ -222,9 +255,6 @@ for(type in ouvrages)
       data.frame(
         get(paste0("data_all_",type))$Code_SANDRE
       )) 
-    
-    ### 3.4.7. MISE EN FORME SORTIE EXCEL ----
-    # Basculé dans l'onglet fonction
     
   }
 }
@@ -385,25 +415,6 @@ for (type in ouvrages) {
 
 ### 4.2.3. DEBITS A4 ----
 
-# --- Données A4 de l'année N-1 
-
-# # Fiabilité d'un bilan = règle déjà utilisée en 4.3.2
-# fiab_bilan <- function(qual_debit, qual_conc) {
-#   case_when(
-#     qual_debit == "Incorrecte" & qual_conc == "Incorrecte" ~ 0,
-#     qual_debit == "Incorrecte" | qual_conc == "Incorrecte" ~ 1,
-#     qual_debit == "Correcte"   & qual_conc == "Correcte"   ~ 3,
-#     TRUE ~ NA_real_)
-# }
-# # Qualité de l'ensemble des bilans qui servent de base à un ratio
-# qualite_base <- function(fiab) {
-#   case_when(
-#     all(fiab %in% 3)       ~ "correcte",
-#     all(fiab %in% 0)       ~ "incorrecte",
-#     any(fiab %in% c(0, 1)) ~ "mixte",
-#     TRUE                   ~ "non_qualifiee")
-# }
-
 # Les débits
 data_debit_A4_N1 <- get(paste0("data_all_STEP_", An - 1)) %>%
   filter(Pt_SANDRE == "A4", Code_sandre_parametre == code_debit) %>%
@@ -424,41 +435,6 @@ data_conc_A4_N1 <- get(paste0("data_all_STEP_", An - 1)) %>%
          Date_debut_prel, Val_resultat_analyse, Derniere_qualif_analyse) %>%
   rename(Concentration = Val_resultat_analyse,
          Qualif_conc = Derniere_qualif_analyse)
-
-
-# --- Fonction de comblement (même règle pour année N et N-1) ---
-# combler_debit <- function(brut, calendrier, lib) {
-#   calendrier %>%
-#     left_join(brut, by = c("Code_SANDRE", "PP_No_interne_Sitou", "Date_debut_prel")) %>%
-#     arrange(Code_SANDRE, PP_No_interne_Sitou, Date_debut_prel) %>%
-#     group_by(Code_SANDRE, PP_No_interne_Sitou) %>%
-#     mutate(
-#       Prop_manquants   = mean(is.na(Debit_m3j)),
-#       Debit_moy_annuel = if (all(is.na(Debit_m3j))) NA_real_ else mean(Debit_m3j, na.rm = TRUE),
-#       Debit_interpole  = if (sum(!is.na(Debit_m3j)) >= 2) {
-#         na.approx(Debit_m3j, x = Date_debut_prel, maxgap = GAP_MAX_JOURS, na.rm = FALSE)
-#       } else NA_real_
-#     ) %>%
-#     ungroup() %>%
-#     mutate(
-#       Cas_debit = case_when(
-#         !is.na(Debit_m3j)                                                ~ "mesure",
-#         Prop_manquants > SEUIL_PROP_MANQUANTS & !is.na(Debit_moy_annuel) ~ "moyenne",
-#         !is.na(Debit_interpole)                                          ~ "interpole",
-#         !is.na(Debit_moy_annuel)                                         ~ "moyenne",
-#         TRUE                                                             ~ "aucun"
-#       ),
-#       Debit_m3j = case_when(
-#         Cas_debit == "mesure"    ~ Debit_m3j,
-#         Cas_debit == "interpole" ~ Debit_interpole,
-#         Cas_debit == "moyenne"   ~ Debit_moy_annuel,
-#         TRUE                     ~ NA_real_
-#       ),
-#       Source_debit = unname(lib[Cas_debit])
-#     ) %>%
-#     select(Code_SANDRE, PP_No_interne_Sitou, Date_debut_prel,
-#            Debit_m3j, Qualif_debit, Source_debit)
-# }
 
 lib_N  <- c(mesure = "Débit mesuré", moyenne = "Débit estimé - moyenne annuelle",
             interpole = "Débit estimé reconstitué", aucun = "Aucun débit")
