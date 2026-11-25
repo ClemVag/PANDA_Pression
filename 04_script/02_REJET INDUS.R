@@ -20,10 +20,6 @@ if (!exists("lancement"))
   ## FONCTION "NOT IN" : 
   `%nin%` <- negate(`%in%`)
   
-  # RESTAURATION DE L'ENVIRONNEMENT
-  
-  renv::restore()
-  
   # Marqueur pour éviter de relancer 
   lancement <-TRUE
 }
@@ -175,27 +171,28 @@ for (i in 1:nrow(liste_points_mesure))
   #'  On compte le nombre de mesures par couple paramètre / unité, mois et année, 
   #'  puis on fait une jointure avec la table calendrier pour s'assurer d'avoir toute
   #'  la période.
+  #'  On utilise les valeurs absolues pour éviter les erreurs de signe.
   data_SRR_PM_01<-data_SRR_PM_00|> 
     group_by(code_sandre_parametre,code_sandre_unite,mois,annee) |> 
     summarise(nb_mens = n(),
-              moy_mens = round(mean(conc),digits = 3))
+              moy_mens = round(mean(abs(conc)),digits = 3))
   
   data_SRR_PM_02<-data_SRR_PM_00 |> 
     group_by(code_sandre_parametre,code_sandre_unite,annee) |> 
     summarise(nb_ann = n(),
-              moy_ann = round(mean(conc),digits = 3))
+              moy_ann = round(mean(abs(conc)),digits = 3))
   
   data_SRR_PM_03<-data_SRR_PM_00 |> 
     mutate(annee_suiv=annee+1) |> 
     group_by(code_sandre_parametre,code_sandre_unite,annee_suiv) |> 
     summarise(nb_ann_prec = n(),
-              moy_ann_prec = round(mean(conc),digits = 3)) |> 
+              moy_ann_prec = round(mean(abs(conc)),digits = 3)) |> 
     rename("annee" = annee_suiv)
   
   data_SRR_PM_04<-data_SRR_PM_00 |> 
     group_by(code_sandre_parametre,code_sandre_unite) |> 
     summarise(nb_pluri = n(),
-              moy_pluri = round(mean(conc),digits = 3))
+              moy_pluri = round(mean(abs(conc)),digits = 3))
   
   
   data_SRR_PM_05<-calendrier_param_unite |> 
@@ -245,16 +242,18 @@ for (i in 1:nrow(liste_points_mesure))
       
       volume= case_when(
         !is.na(vol) ~ vol,
-        is.na(vol) ~ vol_moy),
+        is.na(vol) ~ vol_moy), 
       
       #' Calcul de flux :
       #' On utilise le volume précédemment déterminé et un facteur de conversion. 
+      #' On utilise les valeurs absolues pour éviter les erreurs de signe...
+      #' 
       #' Pour la valeur de concentration : 
       #' - si c'est une valeur mesurée ce jour (conc) : on prend celle-ci en priorité
       #' - si elle n'est pas disponible : on prend une concentration moyenne conc_moy
-      Flux_j = case_when(!is.na(conc) ~ volume*conc*facteur_conv_flux,
-                         is.na(conc) ~ volume * conc_moy*facteur_conv_flux,
-                         TRUE ~ volume * conc_moy * facteur_conv_flux),
+      Flux_j = case_when(!is.na(conc) ~ abs(volume*conc*facteur_conv_flux),
+                         is.na(conc) ~ abs(volume * conc_moy*facteur_conv_flux),
+                         TRUE ~ abs(volume * conc_moy * facteur_conv_flux)),
       
       
       
@@ -291,7 +290,7 @@ for (i in 1:nrow(liste_points_mesure))
 
 flux_SRR_PM_export<- data_SRR_PM |>
   distinct() |>
-  select(site_origine,pt_AS,date,code_sandre_parametre,lib_parametre,code_sandre_unite,Flux_j,unite_flux,Source_flux,Fiabilite_flux)
+  select(site_origine,pt_AS,date,code_sandre_parametre,lib_parametre,Flux_j,unite_flux,Source_flux,Fiabilite_flux)
 
 # Ces lignes de code permettent de calculer des flux mensuels, 
 # à activer si nécessaire.
@@ -337,14 +336,14 @@ flux_forfait_01 <-flux_forfait |>
                                TRUE ~ 28),#On reste sur 28 jours par défaut pour février
          Flux_kg_j_activite = `PRM brute` / nb_j_mois
   ) |> 
-  rename("Code_sandre_parametre" = `Code SANDRE paramètre`)
+  rename("code_sandre_parametre" = `Code SANDRE paramètre`)
 
 flux_forfait_export_detail<-flux_forfait_01 |> 
   select(-c(`PRM brute`,`Unité paramètre`,frequence,annee_CGM, nb_j_mois)) |> 
   relocate(Flux_kg_j_activite, .before = Fiabilite_flux)
 
 flux_forfait_export_condens<-flux_forfait_export_detail |> 
-  group_by(Année,Mois,site_origine,Code_sandre_parametre) |> 
+  group_by(Année,Mois,site_origine,code_sandre_parametre) |> 
   summarise(Flux_kg_j = sum(Flux_kg_j_activite))
 
 ## EXPORT ----

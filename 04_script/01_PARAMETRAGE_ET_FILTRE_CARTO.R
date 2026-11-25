@@ -1,58 +1,63 @@
 # PACKAGES ET FONCTIONS -----
 if (!exists("lancement"))
 {
-  library(conflicted)
-  library(cowplot)
-  library(dplyr)
-  library(flextable)
-  library(forcats)
-  library(geodata)
-  library(ggnewscale) # Package permettant à plusieurs échelles de couleurs de coexister
-  library(ggplot2)
-  library(ggrepel)
-  library(ggspatial)
-  library(here)    # rapports
-  library(janitor) # doublons
-  library(leaflet)
-  library(lubridate) # date et heure
-  library(mapsf)
-  library(mapview)
-  library(openxlsx)
-  library(osmdata)
+  library(pacman)
+  p_load(conflicted,
+         cowplot, 
+         dplyr,
+         flextable, 
+         forcats,
+         geodata,
+         ggnewscale,
+         ggplot2,
+         conflicted,
+         cowplot,
+         dplyr,
+         flextable ,
+         forcats,
+         geodata,
+         ggnewscale, # Package permettant à plusieurs échelles de couleurs de coexister
+         ggplot2,
+         ggrepel,
+         ggspatial,
+         here,    # rapports
+         janitor, # doublons
+         leaflet,
+         nngeo,
+         leafpop,
+         lubridate, # date et heure
+         mapsf,
+         mapview,
+         openxlsx,
+         osmdata,
+         quarto, # rapports
+         questionr,
+         readr,
+         readxl,
+         remotes,
+         rmarkdown, # rapports
+         scales,
+         sf,
+         spData,
+         stars,
+         stringr,
+         summarytools,
+         tidyr,
+         tidyr, # pivot de table
+         tidyverse,
+         tmap)
   library(plotly)
-  library(quarto) # rapports
-  library(questionr)
-  library(raster)
-  library(readr)
-  library(readxl)
-  library(remotes)
-  library(rmarkdown) # rapports
-  library(scales)
-  library(sf)
-  library(spData)
-  library(stars)
-  library(stringr)
-  library(summarytools)
-  library(tidyr)
-  library(tidyr) # pivot de table
-  library(tidyverse)
-  library(tmap)
-  library(renv)
   ## lors d'un export dans excel permet de garder format date YYYY-MM-DD (sinon peut devenir YYYY-DD-MM)
   options(openxlsx.dateFormat = "yyyy-mm-dd")
-  conflict_prefer_all("dplyr")
+  #conflict_prefer_all("dplyr")
   conflicts_prefer(lubridate::month)
-
-
+  conflicts_prefer(terra::intersect)
+  conflicts_prefer(dplyr::filter)
 
 # FONCTIONS
 
   ## FONCTION "NOT IN" : 
   `%nin%` <- negate(`%in%`)
-  
-# RESTAURATION DE L'ENVIRONNEMENT
-  
-  renv::restore()
   
 # Marqueur pour éviter de relancer 
   lancement <-TRUE
@@ -72,6 +77,13 @@ P<-Parametrage |>
 row.names(P)<-Parametrage$Variable
 Parametrage<-as.data.frame(t(P))
 
+
+## TEST SUR FENETRE TEMPORELLE ----
+fenetre_temps <- c(as.numeric(Parametrage$ANNEE_MIN): as.numeric(Parametrage$ANNEE_MAX))
+if(min(fenetre_temps) < 2019 | min(fenetre_temps) > 2025) stop("Année min hors fenêtre autorisée (2019 à 2025) ")
+if(max(fenetre_temps) < 2019 | max(fenetre_temps) > 2025) stop("Année max hors fenêtre autorisée (2019 à 2025) ")
+fenetre_temps_etendue <- sort(c(fenetre_temps, min(fenetre_temps)-1))
+  
 
 # 2. IMPORT DONNEES CARTOGRAPHIQUES ----
 
