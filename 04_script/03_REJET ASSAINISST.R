@@ -227,17 +227,17 @@ for(type in ouvrages)
       
       # récupérer les lignes doublons pour vérification si besoin
       
-      assign(
-        paste0("tmp_", type), 
-        get_dupes(
-          get(paste0("data_all_",type,"_0_",Annee)),
-          DT,
-          Code_SANDRE,
-          Pt_SANDRE,
-          Code_sandre_parametre,
-          PP_No_interne_Sitou,
-          Date_debut_prel,
-          Date_depot  ))
+      # assign(
+      #   paste0("tmp_", type), 
+      #   get_dupes(
+      #     get(paste0("data_all_",type,"_0_",Annee)),
+      #     DT,
+      #     Code_SANDRE,
+      #     Pt_SANDRE,
+      #     Code_sandre_parametre,
+      #     PP_No_interne_Sitou,
+      #     Date_debut_prel,
+      #     Date_depot  ))
       
       # trier les données pour supprimer les doublons après.
       data_AS_2 <- data_AS_1 %>%
@@ -252,7 +252,7 @@ for(type in ouvrages)
       
       
       # supprimer les doublons.
-      data_AS <- data_AS_2 %>%
+      data_AS_3 <- data_AS_2 %>%
           distinct(
             DT,
             Code_SANDRE,
@@ -263,62 +263,84 @@ for(type in ouvrages)
             .keep_all = TRUE
           )
       
-      ### 3.4.5. Liste des paramètres et des couples paramètres/unités ----
+      
       
       #'[TODO] Ce code comporte des erreurs (sélection uniquement pour les STEP)
       #'A reprendre 
       #'
       #'[REPRENDRE ICI]
-      assign(paste0("data_all_",type,"_",Annee),
-             data_AS)
+      # assign(paste0("data_all_",type,"_",Annee),
+      #        data_AS)
       # 
-      # assign(
-      #   paste0("ListeParam_", type), 
-      #   distinct(
-      #     data.frame(
-      #       Code_sandre_parametre = data_all_STEP$Code_sandre_parametre
-      #     ))) 
       # 
-      # assign(
-      #   paste0("ListeParamUnites_", type), 
-      #   distinct(
-      #     data.frame(
-      #       Code_sandre_parametre = data_all_STEP$Code_sandre_parametre,
-      #       Code_unite = data_all_STEP$Code_unite
-      #     ))) 
+
       
       
       
       
       
-      ### 3.4.6. SUPPRESSION DES VARIABLES INTERMEDIAIRES ----
+     
       
-      
+      ### Concaténation des tables -----
       
       if(compteur_incrementation == 1)
       {
         assign(paste0("data_all_",type),
-               get(paste0("data_all_",type,"_",Annee)))
+               data_AS_3)
       } else {
         assign(paste0("data_all_",type),
-               rbind(get(paste0("data_all_",type)),get(paste0("data_all_",type,"_",Annee))))
+               rbind(get(paste0("data_all_",type)),data_AS_3))
       }
       
+      ### Incrémentation du compteur -----
       compteur_incrementation <- compteur_incrementation+1 
-      rm(list = c(
-        paste0("data_all_",type,"_0_",Annee),
-        paste0("data_all_",type,"_1_",Annee),
-        paste0("data_all_",type,"_",Annee)))
-    }
+      
+      ### 3.4.6. SUPPRESSION DES VARIABLES INTERMEDIAIRES ----
+     
+    
+      }
     
   }
-  ### 3.4.7. CREATION DE LA LISTE DES STEP et SCL ----
+
+  
+  ## 3.4.7. CREATION DE LA LISTE DES STEP et SCL ----
   assign(
     paste0("Liste_", type),
-    unique(get(paste0("data_all_",type))$Code_SANDRE))
+    tibble(Code_SANDRE = unique(get(paste0("data_all_",type))$Code_SANDRE)))
+
+  
+  ### 3.4.5. Liste des couples points / paramètres et des couples paramètres/unités ----
+  assign(
+    paste0("ListeParam_", type),
+    # Ancienne version (nouvelle annule et remplace)
+    # distinct(
+    #   tibble(Code_sandre_parametre = get(paste0("data_all_",type))$Code_sandre_parametre)))
+    get(paste0("data_all_",type)) |> 
+      select(PP_No_interne_Sitou,Code_sandre_parametre,Code_unite) |> 
+      distinct() |> 
+      filter(Code_sandre_parametre %nin% c("1552","1553")) #On retire les paramètres volume et pluviométrie
+  )
+
+  assign(
+    paste0("ListeParamUnites_", type),
+    get(paste0("data_all_",type))
+       |> 
+    select(Code_sandre_parametre, Code_unite) |> 
+      distinct())
+  
   
 }
 
+rm(list = c(
+  "data_AS",
+  "data_AS_0",
+  "data_AS_1",
+  "data_AS_2",
+  "data_AS_3",
+  "Roseau_SCL",
+  "Liste_points_AS_SCL",
+  "Liste_points_AS_STEP"
+  ))
 
 
 
@@ -333,9 +355,6 @@ params_flux <- read_excel("02_data/BASE/Table_Param_Unites.xlsx") %>%
          "Unite_ref" = `Unité référence ?`)  #%>%
 # filter(Code_sandre_parametre %in% c("1313","1314","1305","1319","1335","1339","1340","1551","1350"),
 #        Unite_ref == "Oui")
-
-#' [TODO] Ajouter le code pour convertir les unités sur la table de données utilisée.
-
 
 
 code_debit <- "1552"  # Vol.Moy.J. en m3/j
@@ -387,7 +406,7 @@ flux_forfait_A4 <- base_A4 %>%
 
 # Débit A4
 debit_forfait_A4 <- base_A4 %>%
-  inner_join(debit_forfaitaire, by= character())%>%
+  cross_join(debit_forfaitaire)%>%
   mutate(Debit_forfait = Capacite_STEP * d_forfait) %>%
   select(-d_forfait, -Capacite_STEP)
 
@@ -396,8 +415,8 @@ debit_forfait_A4 <- base_A4 %>%
 # ──────────────────────────────────────────── ─
 
 ### 4.2.1. Pluviométries journalières ----
-
-data_pluvio <- get(paste0("data_all_STEP_",Annee)) %>%
+data_pluvio <- data_all_STEP %>%
+#data_pluvio <- get(paste0("data_all_STEP_",Annee)) %>%  # Version originale de Romain
   filter(
     #Pt_SANDRE == "A3",
     Code_sandre_parametre == code_pluvio
@@ -418,16 +437,17 @@ data_pluvio <- get(paste0("data_all_STEP_",Annee)) %>%
 ### 4.2.2. Rejets ----
 
 for (type in ouvrages) {
-  assign(paste0("data_rejet_",type),
-         get(paste0("data_all_",type,"_",Annee)) %>%
-           filter(Pt_SANDRE %in% c(pts_rejet,"A3"))
-  )
+  #' Note CV : Code redondant avec la nouvelle version de la requête
+  # assign(paste0("data_rejet_",type),
+  #        get(paste0("data_all_",type,"_",Annee)) %>%
+  #          filter(Pt_SANDRE %in% c(pts_rejet,"A3"))
+  # )
   
   
   # Débits journaliers (tous les jours disponibles, pas seulement les jours de bilan)
   
   assign(paste0("data_debit_",type),
-         get(paste0("data_rejet_",type)) %>%
+         get(paste0("data_all_",type)) %>%
            filter(Code_sandre_parametre == code_debit) %>%
            select(
              Code_SANDRE, 										  
@@ -443,7 +463,7 @@ for (type in ouvrages) {
            mutate(
              Annee       = year(Date_debut_prel),
              Mois        = month(Date_debut_prel),
-             Nb_jours_mois = days_in_month(Date_debut_prel)
+             Nb_jours_mois = days_in_month(Date_debut_prel) # CV : voir si toujours nécessaire
            )
   )
   
@@ -451,8 +471,8 @@ for (type in ouvrages) {
   # (= jours de bilan 24h / jours de déversements)
   
   assign(paste0("data_conc_",type),
-         get(paste0("data_rejet_",type)) %>%
-           filter(Code_sandre_parametre %in% params_flux$Code_sandre_parametre) %>%
+         get(paste0("data_all_",type)) %>%
+           filter(Code_sandre_parametre %in% params_flux$Code_sandre_parametre) %>% #Alternative: exclure les T, pH, volume, pluvio.
            select(
              Code_SANDRE,
              Pt_SANDRE,
@@ -473,8 +493,10 @@ for (type in ouvrages) {
 ### 4.2.3. DEBITS A4 ----
 
 # Les débits
-data_debit_A4_N1 <- get(paste0("data_all_STEP_", Annee - 1)) %>%
-  filter(Pt_SANDRE == "A4", Code_sandre_parametre == code_debit) %>%
+data_debit_A4_N1 <- data_all_STEP %>%
+  filter(year(Date_debut_prel) == min(fenetre_temps_etendue), 
+         Pt_SANDRE == "A4", 
+         Code_sandre_parametre == code_debit) %>%
   select(Code_SANDRE, PP_No_interne_Sitou, Date_debut_prel, 
          Val_resultat_analyse, Derniere_qualif_analyse) %>%
   rename(Debit_m3j = Val_resultat_analyse,
@@ -484,8 +506,9 @@ debit_forfait_pt <- debit_forfait_A4 %>%
   distinct(Code_SANDRE, PP_No_interne_Sitou, Debit_forfait)
 
 # Les concentrations
-data_conc_A4_N1 <- get(paste0("data_all_STEP_", Annee - 1)) %>%
-  filter(Pt_SANDRE == "A4",
+data_conc_A4_N1 <- data_all_STEP %>%
+  filter(year(Date_debut_prel) == min(fenetre_temps_etendue), 
+         Pt_SANDRE == "A4",
          Code_sandre_parametre %in% params_flux$Code_sandre_parametre,
          !is.na(Val_resultat_analyse)) %>%
   select(Code_SANDRE, PP_No_interne_Sitou, Code_sandre_parametre,
@@ -499,16 +522,17 @@ lib_N1 <- c(mesure = "Débit estimé (mesure N-1)", moyenne = "Débit estimé (m
             interpole = "Débit estimé reconstitué N-1",aucun = "Aucun débit")
 
 # TOUS les points A4 de Sitouref x tous les jours de l'année N ---
-points_A4 <- Liste_points_AS_STEP %>%
-  semi_join(capacite_nominale_STEP %>% filter(Direction ==DT),
-            by = c("Code_SANDRE" = "Code_SANDRE"))%>%
-  filter(Pt_SANDRE == "A4 - Sortie station") %>%
-  distinct(Code_SANDRE = Code_SANDRE, PP_No_interne_Sitou)
+points_A4 <- Liste_points_AS_STEP_etudies %>%
+  # semi_join(capacite_nominale_STEP %>% filter(Direction ==DT),
+  #           by = c("Code_SANDRE" = "Code_SANDRE"))%>%
+  filter(Pt_SANDRE == "A4") #%>%
+  # distinct(Code_SANDRE = Code_SANDRE, PP_No_interne_Sitou)
 
 cal_A4 <- points_A4 %>%
-  crossing(Date_debut_prel = seq.Date(as.Date(paste0(Annee, "-01-01")),
-                                      as.Date(paste0(Annee, "-12-31")), by = "day"))
+  crossing(Date_debut_prel = seq.Date(as.Date(paste0(min(fenetre_temps_etendue)+1, "-01-01")),
+                                      as.Date(paste0(max(fenetre_temps_etendue), "-12-31")), by = "day"))
 
+#'[REPRENDRE ICI] - Modifier pour intégrer le comblement des débits sur l'année N-1
 brut_debit_N <- data_debit_STEP %>%
   filter(Pt_SANDRE == "A4") %>%
   select(Code_SANDRE, PP_No_interne_Sitou, Date_debut_prel, Debit_m3j, Qualif_debit)
@@ -520,8 +544,10 @@ brut_debit_N1 <- data_debit_A4_N1 %>%
   filter(!is.na(Date_debut_prel)) %>%
   select(Code_SANDRE, PP_No_interne_Sitou, Date_debut_prel, Debit_m3j, Qualif_debit)
 
+
 debit_A4_N  <- combler_debit(brut_debit_N,  cal_A4, lib_N)
 debit_A4_N1 <- combler_debit(brut_debit_N1, cal_A4, lib_N1)
+
 
 # Cascade finale : débit N (mesuré/estimé) sinon débit N-1 sinon forfait sinon aucun
 debit_A4_cascade <- debit_A4_N %>%
@@ -560,6 +586,9 @@ debit_A4_cascade <- debit_A4_N %>%
 # ──────────────────────────────────────────── ─ 
 
 ### 4.3.1. Grille complète : tous les jours avec débit × tous les paramètres ----
+#' Reprendre cette partie : l'opération Crossing fait trop de lignes. Adapté pour
+#' l'usage macropolluant uniquement mais pas si on ajoute les micropolluants. 
+
 
 for (type in ouvrages) {
   assign(paste0("grille_jours_",type),
@@ -570,7 +599,9 @@ for (type in ouvrages) {
                   Debit_m3j,Qualif_debit
            ) %>%
            mutate(Source_debit="Débit mesuré") %>%
-           crossing(params_flux %>% select(Code_sandre_parametre))
+           # Ancienne version
+           # crossing(params_flux %>% select(Code_sandre_parametre))
+           full_join(get(paste0("ListeParam_",type)), by = "PP_No_interne_Sitou", relationship = "many-to-many")
   )
 }
 
