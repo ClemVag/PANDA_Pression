@@ -220,7 +220,9 @@ for(type in ouvrages)
                                  Code_sandre_parametre == "1339" & Code_unite =="168" ~ "171",
                                  Code_sandre_parametre == "1340" & Code_unite =="168" ~ "173",
                                  TRUE ~ Code_unite)
-        )
+        ) |> 
+        # On supprime les paramètres température eau, température air, pH
+        filter(Code_sandre_parametre %nin% c("1301","1409","1302"))
       
       ### 3.4.4. Nettoyage des doublons et des caractères problématiques ----
       # TEST : s'il existe plus d'une date de dépôt, conserver uniquement la donnée la plus récente
@@ -264,23 +266,6 @@ for(type in ouvrages)
           )
       
       
-      
-      #'[TODO] Ce code comporte des erreurs (sélection uniquement pour les STEP)
-      #'A reprendre 
-      #'
-      #'[REPRENDRE ICI]
-      # assign(paste0("data_all_",type,"_",Annee),
-      #        data_AS)
-      # 
-      # 
-
-      
-      
-      
-      
-      
-     
-      
       ### Concaténation des tables -----
       
       if(compteur_incrementation == 1)
@@ -295,7 +280,7 @@ for(type in ouvrages)
       ### Incrémentation du compteur -----
       compteur_incrementation <- compteur_incrementation+1 
       
-      ### 3.4.6. SUPPRESSION DES VARIABLES INTERMEDIAIRES ----
+
      
     
       }
@@ -303,13 +288,13 @@ for(type in ouvrages)
   }
 
   
-  ## 3.4.7. CREATION DE LA LISTE DES STEP et SCL ----
+  ## 3.4.5. CREATION DE LA LISTE DES STEP et SCL ----
   assign(
     paste0("Liste_", type),
     tibble(Code_SANDRE = unique(get(paste0("data_all_",type))$Code_SANDRE)))
 
   
-  ### 3.4.5. Liste des couples points / paramètres et des couples paramètres/unités ----
+  ### 3.4.6. Liste des couples points / paramètres et des couples paramètres/unités ----
   assign(
     paste0("ListeParam_", type),
     # Ancienne version (nouvelle annule et remplace)
@@ -323,14 +308,14 @@ for(type in ouvrages)
 
   assign(
     paste0("ListeParamUnites_", type),
-    get(paste0("data_all_",type))
-       |> 
-    select(Code_sandre_parametre, Code_unite) |> 
-      distinct())
+    get(paste0("data_all_",type))  |> 
+      select(Code_sandre_parametre, Code_unite) |> 
+      distinct()
+    )
   
   
 }
-
+### 3.4.7. NETTOYAGE DES VARIABLES INTERMEDIAIRES ----
 rm(list = c(
   "data_AS",
   "data_AS_0",
@@ -472,7 +457,9 @@ for (type in ouvrages) {
   
   assign(paste0("data_conc_",type),
          get(paste0("data_all_",type)) %>%
-           filter(Code_sandre_parametre %in% params_flux$Code_sandre_parametre) %>% #Alternative: exclure les T, pH, volume, pluvio.
+           # On exclut des concentrations les débits, la pluviométrie, la 
+           # températude d'eau (1301), d'air (1409) et le pJ (1302) 
+           filter(Code_sandre_parametre %nin% c(code_debit,code_pluvio,1301,1409,1302)) |> 
            select(
              Code_SANDRE,
              Pt_SANDRE,
@@ -586,8 +573,8 @@ debit_A4_cascade <- debit_A4_N %>%
 # ──────────────────────────────────────────── ─ 
 
 ### 4.3.1. Grille complète : tous les jours avec débit × tous les paramètres ----
-#' Reprendre cette partie : l'opération Crossing fait trop de lignes. Adapté pour
-#' l'usage macropolluant uniquement mais pas si on ajoute les micropolluants. 
+#' L'opération Crossing fait trop de lignes, remplacement par un full_join. 
+#' Adapté pour l'usage macropolluants et micropolluants. 
 
 
 for (type in ouvrages) {
@@ -605,15 +592,17 @@ for (type in ouvrages) {
   )
 }
 
+  
 grille_jours_STEP <- grille_jours_STEP %>%
-  filter(Pt_SANDRE != "A4") %>%
+  filter(Pt_SANDRE %nin% c("A4","A3")) %>%
   bind_rows(
     debit_A4_cascade %>%
       filter(!is.na(Debit_m3j)) %>%
       select(Code_SANDRE, Pt_SANDRE, PP_No_interne_Sitou, Date_debut_prel,
              Debit_m3j, Qualif_debit, Source_debit) %>%
-      crossing(params_flux %>% select(Code_sandre_parametre))
-  )
+      #crossing(params_flux %>% select(Code_sandre_parametre))
+      full_join(get(paste0("ListeParam_",type)), by = "PP_No_interne_Sitou", relationship = "many-to-many")
+      )
 
 ### 4.3.2. Flux sur les jours de bilan = concentrations x volume ----
 for (type in ouvrages) {
