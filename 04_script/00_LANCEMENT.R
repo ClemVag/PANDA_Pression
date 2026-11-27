@@ -78,7 +78,8 @@ if (!exists("lancement"))
          tidyr,
          tidyr, # pivot de table
          tidyverse,
-         tmap)
+         tmap,
+         zoo)
   library(plotly)
   ## lors d'un export dans excel permet de garder format date YYYY-MM-DD (sinon peut devenir YYYY-DD-MM)
   options(openxlsx.dateFormat = "yyyy-mm-dd")
